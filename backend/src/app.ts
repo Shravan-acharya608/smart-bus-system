@@ -11,6 +11,9 @@ import { createSocketServer } from './socket';
 
 const app = express();
 
+// Trust reverse proxy headers (Vercel, Render, Cloudflare)
+app.set('trust proxy', 1);
+
 // ── Security headers ─────────────────────────────────────────────────────────
 app.use(helmet());
 
@@ -137,6 +140,8 @@ app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
 
 // ── HTTP server + Socket.IO ──────────────────────────────────────────────────
 export const httpServer = http.createServer(app);
-createSocketServer(httpServer);
+if (!process.env.VERCEL) {
+  createSocketServer(httpServer);
+}
 
 export default app;
