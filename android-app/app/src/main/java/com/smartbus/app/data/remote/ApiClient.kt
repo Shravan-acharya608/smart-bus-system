@@ -59,9 +59,9 @@ class ApiClient(private val userPreferences: UserPreferences) {
         .addInterceptor(authInterceptor)
         .addInterceptor(fallbackInterceptor)
         .addInterceptor(loggingInterceptor)
-        .connectTimeout(10, TimeUnit.SECONDS)
-        .readTimeout(20, TimeUnit.SECONDS)
-        .writeTimeout(15, TimeUnit.SECONDS)
+        .connectTimeout(45, TimeUnit.SECONDS)
+        .readTimeout(60, TimeUnit.SECONDS)
+        .writeTimeout(30, TimeUnit.SECONDS)
         .build()
 
     fun createService(baseUrl: String = BuildConfig.BASE_URL): ApiService {

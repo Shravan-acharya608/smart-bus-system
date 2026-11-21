@@ -33,11 +33,7 @@ object DeviceUtils {
     }
 
     fun getDefaultBaseUrl(): String {
-        return if (isEmulator()) {
-            "http://10.0.2.2:3000/api/v1/"
-        } else {
-            BuildConfig.BASE_URL
-        }
+        return BuildConfig.BASE_URL
     }
 }
 

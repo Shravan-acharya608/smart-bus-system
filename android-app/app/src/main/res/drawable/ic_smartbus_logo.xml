@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="64dp"
+    android:height="64dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Circular Badge Base -->
+    <path
+        android:fillColor="#0284C7"
+        android:pathData="M 54,54 m -50,0 a 50,50 0 1,0 100,0 a 50,50 0 1,0 -100,0" />
+
+    <!-- Pulse Ring -->
+    <path
+        android:strokeColor="#38BDF8"
+        android:strokeWidth="2"
+        android:strokeAlpha="0.5"
+        android:pathData="M 54,54 m -44,0 a 44,44 0 1,0 88,0 a 44,44 0 1,0 -88,0" />
+
+    <!-- GPS Connectivity Waves -->
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2.2"
+        android:strokeLineCap="round"
+        android:pathData="M44,24 C47,21 51,19.5 54,19.5 C57,19.5 61,21 64,24" />
+
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2.2"
+        android:strokeLineCap="round"
+        android:pathData="M48,28.5 C49.8,26.5 51.8,25.5 54,25.5 C56.2,25.5 58.2,26.5 60,28.5" />
+
+    <!-- Radio Beacon Pulse Dot -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M 54, 33 m -2, 0 a 2,2 0 1,0 4,0 a 2,2 0 1,0 -4,0" />
+
+    <!-- Left & Right Bus Tires -->
+    <path
+        android:fillColor="#0F172A"
+        android:pathData="M37,73 h6 v8 h-6 z" />
+    <path
+        android:fillColor="#0F172A"
+        android:pathData="M65,73 h6 v8 h-6 z" />
+
+    <!-- Rearview Mirrors -->
+    <path
+        android:fillColor="#E2E8F0"
+        android:pathData="M33,47 C32,47 32,54 33,54 L36,54 L36,47 Z" />
+    <path
+        android:fillColor="#E2E8F0"
+        android:pathData="M75,47 C76,47 76,54 75,54 L72,54 L72,47 Z" />
+
+    <!-- Main Aerodynamic Bus Body Shell -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M44,37 C39,37 36,40.5 36,45 L36,73 C36,75 37.5,76 39.5,76 L68.5,76 C70.5,76 72,75 72,73 L72,45 C72,40.5 69,37 64,37 Z" />
+
+    <!-- Top Destination Display LED (SmartBus Sign) -->
+    <path
+        android:fillColor="#0284C7"
+        android:pathData="M43,39.5 h22 v3.5 h-22 z" />
+
+    <!-- Large Panoramic Windshield Glass -->
+    <path
+        android:fillColor="#BAE6FD"
+        android:pathData="M38.5,45 h31 v16 h-31 z" />
+
+    <!-- Windshield Center Divider -->
+    <path
+        android:fillColor="#0284C7"
+        android:pathData="M53.5,45 h1 v16 h-1 z" />
+
+    <!-- Lower Grill & Sensor Bar -->
+    <path
+        android:fillColor="#0284C7"
+        android:pathData="M47,67.5 h14 v3 h-14 z" />
+
+    <!-- Dual Bright Headlights -->
+    <path
+        android:fillColor="#F59E0B"
+        android:pathData="M39.5,66.5 h5 v4 h-5 z" />
+    <path
+        android:fillColor="#F59E0B"
+        android:pathData="M63.5,66.5 h5 v4 h-5 z" />
+
+    <!-- Front Protective Transit Bumper -->
+    <path
+        android:fillColor="#475569"
+        android:pathData="M35,72.5 h38 v3 h-38 z" />
+
+</vector>

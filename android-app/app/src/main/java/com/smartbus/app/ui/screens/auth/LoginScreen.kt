@@ -281,6 +281,26 @@ fun LoginScreen(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
+                        Button(
+                            onClick = { tempUrl = "https://smart-bus-system.onrender.com/api/v1/" },
+                            modifier = Modifier.weight(1.3f),
+                            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
+                        ) {
+                            Text("☁️ Cloud (Render)", fontSize = 11.sp)
+                        }
+                        OutlinedButton(
+                            onClick = { tempUrl = "http://10.0.2.2:3000/api/v1/" },
+                            modifier = Modifier.weight(1f),
+                            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
+                        ) {
+                            Text("Emulator", fontSize = 11.sp)
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
                         OutlinedButton(
                             onClick = { tempUrl = "http://192.168.43.196:3000/api/v1/" },
                             modifier = Modifier.weight(1f),
@@ -294,13 +314,6 @@ fun LoginScreen(
                             contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
                         ) {
                             Text("USB / ADB", fontSize = 11.sp)
-                        }
-                        OutlinedButton(
-                            onClick = { tempUrl = "http://10.0.2.2:3000/api/v1/" },
-                            modifier = Modifier.weight(1f),
-                            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
-                        ) {
-                            Text("Emulator", fontSize = 11.sp)
                         }
                     }
                     Spacer(modifier = Modifier.height(12.dp))

@@ -31,9 +31,9 @@ android {
             useSupportLibrary = true
         }
 
-        // Default Backend URL configured for Physical Device & LAN testing:
-        buildConfigField("String", "BASE_URL", "\"http://192.168.43.196:3000/api/v1/\"")
-        buildConfigField("String", "WS_URL", "\"http://192.168.43.196:3000\"")
+        // Default Backend URL configured for 24/7 Cloud Production (Render):
+        buildConfigField("String", "BASE_URL", "\"https://smart-bus-system.onrender.com/api/v1/\"")
+        buildConfigField("String", "WS_URL", "\"https://smart-bus-system.onrender.com\"")
     }
 
     buildTypes {
