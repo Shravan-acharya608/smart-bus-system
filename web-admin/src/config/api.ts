@@ -12,7 +12,7 @@ export const getBackendBaseUrl = (): string => {
     window.location.hostname !== 'localhost' &&
     window.location.hostname !== '127.0.0.1'
   ) {
-    return 'https://smart-bus-system.onrender.com/api/v1';
+    return 'https://smart-bus-backend-two.vercel.app/api/v1';
   }
   return 'http://localhost:3000/api/v1';
 };
@@ -31,7 +31,7 @@ export const getWsUrl = (): string => {
     window.location.hostname !== 'localhost' &&
     window.location.hostname !== '127.0.0.1'
   ) {
-    return 'https://smart-bus-system.onrender.com';
+    return 'https://smart-bus-backend-two.vercel.app';
   }
   return 'http://localhost:3000';
 };

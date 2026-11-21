@@ -31,9 +31,9 @@ android {
             useSupportLibrary = true
         }
 
-        // Default Backend URL configured for 24/7 Cloud Production (Render):
-        buildConfigField("String", "BASE_URL", "\"https://smart-bus-system.onrender.com/api/v1/\"")
-        buildConfigField("String", "WS_URL", "\"https://smart-bus-system.onrender.com\"")
+        // Default Backend URL configured for 24/7 Cloud Production (Vercel):
+        buildConfigField("String", "BASE_URL", "\"https://smart-bus-backend-two.vercel.app/api/v1/\"")
+        buildConfigField("String", "WS_URL", "\"https://smart-bus-backend-two.vercel.app\"")
     }
 
     buildTypes {

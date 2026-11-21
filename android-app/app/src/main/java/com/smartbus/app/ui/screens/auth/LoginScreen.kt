@@ -282,11 +282,11 @@ fun LoginScreen(
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         Button(
-                            onClick = { tempUrl = "https://smart-bus-system.onrender.com/api/v1/" },
+                            onClick = { tempUrl = "https://smart-bus-backend-two.vercel.app/api/v1/" },
                             modifier = Modifier.weight(1.3f),
                             contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
                         ) {
-                            Text("☁️ Cloud (Render)", fontSize = 11.sp)
+                            Text("☁️ Cloud (Vercel)", fontSize = 11.sp)
                         }
                         OutlinedButton(
                             onClick = { tempUrl = "http://10.0.2.2:3000/api/v1/" },

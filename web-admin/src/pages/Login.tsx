@@ -265,14 +265,14 @@ const Login: React.FC = () => {
             <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
-                onClick={() => setServerUrlInput('https://smart-bus-system.onrender.com/api/v1')}
+                onClick={() => setServerUrlInput('https://smart-bus-backend-two.vercel.app/api/v1')}
                 className="p-2.5 text-left border border-sky-200 bg-sky-50 rounded-xl hover:bg-sky-100 text-xs transition-colors"
               >
                 <p className="font-bold text-sky-900 flex items-center gap-1.5">
                   <Server size={14} className="text-sky-600" />
-                  Render Cloud (24/7)
+                  Vercel Backend (24/7)
                 </p>
-                <p className="text-[10px] text-sky-700 truncate mt-0.5">https://smart-bus-system.onrender.com/api/v1</p>
+                <p className="text-[10px] text-sky-700 truncate mt-0.5">https://smart-bus-backend-two.vercel.app/api/v1</p>
               </button>
               <button
                 type="button"
