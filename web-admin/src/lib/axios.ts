@@ -1,10 +1,10 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
-import { API_BASE_URL, API_ENDPOINTS } from '../config/api';
+import { getBackendBaseUrl, API_ENDPOINTS } from '../config/api';
 
 const apiClient = axios.create({
-  baseURL: API_BASE_URL,
+  baseURL: getBackendBaseUrl(),
   headers: { 'Content-Type': 'application/json' },
-  timeout: 15000,
+  timeout: 30000,
 });
 
 let isRefreshing = false;
@@ -24,9 +24,10 @@ const processQueue = (error: unknown, token: string | null = null) => {
   failedQueue = [];
 };
 
-// Request interceptor: attach Bearer token
+// Request interceptor: attach Bearer token and current dynamic baseURL
 apiClient.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
+    config.baseURL = getBackendBaseUrl();
     const stored = localStorage.getItem('smartbus-auth');
     if (stored) {
       try {
@@ -75,7 +76,7 @@ apiClient.interceptors.response.use(
 
         if (!refreshToken) throw new Error('No refresh token');
 
-        const response = await axios.post(`${API_BASE_URL}${API_ENDPOINTS.AUTH.REFRESH}`, {
+        const response = await axios.post(`${getBackendBaseUrl()}${API_ENDPOINTS.AUTH.REFRESH}`, {
           refreshToken,
         });
 

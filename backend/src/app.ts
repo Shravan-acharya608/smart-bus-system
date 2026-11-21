@@ -35,6 +35,16 @@ app.use(
         return callback(null, true);
       }
 
+      // Automatically allow Vercel and Render cloud frontend domains
+      try {
+        const parsed = new URL(origin);
+        if (parsed.hostname.endsWith('.vercel.app') || parsed.hostname.endsWith('.onrender.com')) {
+          return callback(null, true);
+        }
+      } catch {
+        // invalid URL format, proceed to checks below
+      }
+
       const isLocal = /^https?:\/\/(localhost|127\.0\.0\.1|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+)(:\d+)?$/.test(origin);
       if (isLocal) {
         return callback(null, true);
