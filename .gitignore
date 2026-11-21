@@ -1,0 +1,31 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build artifacts
+dist/
+build/
+.next/
+out/
+
+# Environment variables
+.env.local
+.env.*.local
+
+# Android & Gradle
+.gradle/
+local.properties
+.idea/
+*.iml
+app/build/
+*.hprof
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.log
+
+# OS
+.DS_Store
+Thumbs.db

@@ -1,0 +1,465 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum UserRole {
+  PASSENGER
+  DRIVER
+  CONDUCTOR
+  BUS_OWNER
+  ADMIN
+}
+
+enum BusStatus {
+  ACTIVE
+  INACTIVE
+  MAINTENANCE
+}
+
+enum TripStatus {
+  SCHEDULED
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+enum TicketStatus {
+  PENDING
+  PAID
+  USED
+  CANCELLED
+  EXPIRED
+  HELD
+  REFUNDED
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCESS
+  FAILED
+  REFUNDED
+  PARTIAL_REFUND
+}
+
+enum PaymentMethod {
+  ONLINE
+  CASH
+  UPI
+}
+
+enum EscrowStatus {
+  HELD_IN_ESCROW
+  SETTLED_TO_OWNER
+  REFUNDED_TO_USER
+}
+
+enum IncidentSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum NotificationType {
+  BOARDING_ALERT
+  DESTINATION_ALERT
+  SERVICE_ANNOUNCEMENT
+  TRIP_UPDATE
+  PAYMENT_SUCCESS
+  PAYMENT_FAILURE
+  SYSTEM
+}
+
+model Organization {
+  id        String   @id @default(uuid())
+  name      String
+  code      String   @unique
+  address   String?
+  phone     String?
+  email     String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  users     User[]
+  buses     Bus[]
+  routes    Route[]
+}
+
+model User {
+  id             String    @id @default(uuid())
+  email          String    @unique
+  phone          String?   @unique
+  passwordHash   String
+  firstName      String
+  lastName       String
+  role           UserRole
+  isActive       Boolean   @default(true)
+  isVerified     Boolean   @default(false)
+  fcmToken       String?
+  organizationId String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  lastLoginAt    DateTime?
+
+  organization     Organization?      @relation(fields: [organizationId], references: [id])
+  refreshTokens    RefreshToken[]
+  passengerTickets Ticket[]           @relation("PassengerTickets")
+  driverTrips      TripAssignment[]   @relation("DriverAssignments")
+  conductorTrips   TripAssignment[]   @relation("ConductorAssignments")
+  notifications    Notification[]
+  journeyShares    JourneyShare[]     @relation("JourneyOwner")
+  sharedWith       JourneyShare[]     @relation("SharedWith")
+  auditLogs        AuditLog[]
+  incidentReports  IncidentReport[] @relation("IncidentReports")
+  frequentRoutes   FrequentRoute[]  @relation("FrequentRoutes")
+
+  @@index([email])
+  @@index([role])
+  @@index([organizationId])
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  isRevoked Boolean  @default(false)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([token])
+}
+
+model Bus {
+  id              String    @id @default(uuid())
+  registrationNo  String    @unique
+  busNumber       String    @unique
+  capacity        Int
+  status          BusStatus @default(ACTIVE)
+  make            String?
+  model           String?
+  year            Int?
+  organizationId  String
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  organization Organization    @relation(fields: [organizationId], references: [id])
+  trips        Trip[]
+
+  @@index([organizationId])
+  @@index([status])
+}
+
+model Route {
+  id             String   @id @default(uuid())
+  name           String
+  code           String   @unique
+  description    String?
+  isActive       Boolean  @default(true)
+  organizationId String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  stops        RouteStop[]
+  trips        Trip[]
+
+  @@index([organizationId])
+}
+
+model Stop {
+  id        String   @id @default(uuid())
+  name      String
+  latitude  Float
+  longitude Float
+  address   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  routeStops RouteStop[]
+  boardingFrequent     FrequentRoute[] @relation("BoardingStopFrequent")
+  destinationFrequent  FrequentRoute[] @relation("DestinationStopFrequent")
+
+  @@index([latitude, longitude])
+}
+
+model RouteStop {
+  id                     String   @id @default(uuid())
+  routeId                String
+  stopId                 String
+  stopOrder              Int
+  scheduledArrivalTime   String?
+  scheduledDepartureTime String?
+  distanceFromStart      Float?   @default(0)
+  fareFromStart          Float?   @default(0)
+  createdAt              DateTime @default(now())
+
+  route Route @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  stop  Stop  @relation(fields: [stopId], references: [id])
+
+  @@unique([routeId, stopId])
+  @@unique([routeId, stopOrder])
+  @@index([routeId])
+}
+
+model Trip {
+  id             String     @id @default(uuid())
+  busId          String
+  routeId        String
+  status         TripStatus @default(SCHEDULED)
+  scheduledStart DateTime
+  scheduledEnd   DateTime?
+  actualStart    DateTime?
+  actualEnd      DateTime?
+  notes          String?
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  bus             Bus              @relation(fields: [busId], references: [id])
+  route           Route            @relation(fields: [routeId], references: [id])
+  assignments     TripAssignment[]
+  locationUpdates LocationUpdate[]
+  tickets         Ticket[]
+  boardingEvents  BoardingEvent[]
+  exitEvents      ExitEvent[]
+  notifications   Notification[]
+  journeyShares   JourneyShare[]
+  incidents     IncidentReport[]
+
+  @@index([busId])
+  @@index([routeId])
+  @@index([status])
+  @@index([scheduledStart])
+}
+
+model TripAssignment {
+  id          String   @id @default(uuid())
+  tripId      String
+  driverId    String?
+  conductorId String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  trip      Trip  @relation(fields: [tripId], references: [id])
+  driver    User? @relation("DriverAssignments", fields: [driverId], references: [id])
+  conductor User? @relation("ConductorAssignments", fields: [conductorId], references: [id])
+
+  @@unique([tripId])
+  @@index([driverId])
+  @@index([conductorId])
+}
+
+model LocationUpdate {
+  id        String   @id @default(uuid())
+  tripId    String
+  latitude  Float
+  longitude Float
+  speed     Float?   @default(0)
+  heading   Float?   @default(0)
+  accuracy  Float?
+  timestamp DateTime @default(now())
+  createdAt DateTime @default(now())
+
+  trip Trip @relation(fields: [tripId], references: [id])
+
+  @@index([tripId])
+  @@index([timestamp])
+}
+
+model Ticket {
+  id                  String        @id @default(uuid())
+  ticketCode          String        @unique @default(uuid())
+  passengerId         String
+  tripId              String
+  boardingStopId      String
+  destinationStopId   String
+  fare                Float
+  status              TicketStatus  @default(PENDING)
+  paymentMethod       PaymentMethod @default(ONLINE)
+  isOfflineIssued     Boolean       @default(false)
+  clientEventId       String?       @unique
+  qrData              String?
+  issuedByConductorId String?
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+
+  passenger     User           @relation("PassengerTickets", fields: [passengerId], references: [id])
+  trip          Trip           @relation(fields: [tripId], references: [id])
+  payment       Payment?
+  boardingEvent BoardingEvent?
+  exitEvent     ExitEvent?
+
+  @@index([passengerId])
+  @@index([tripId])
+  @@index([status])
+  @@index([ticketCode])
+}
+
+model Payment {
+  id                String        @id @default(uuid())
+  ticketId          String        @unique
+  amount            Float
+  currency          String        @default("INR")
+  status            PaymentStatus @default(PENDING)
+  paymentMethod     PaymentMethod @default(ONLINE)
+  providerOrderId   String?       @unique
+  providerPaymentId String?
+  providerSignature String?
+  idempotencyKey    String        @unique @default(uuid())
+  isSandbox         Boolean       @default(true)
+  refundAmount      Float?        @default(0)
+  escrowStatus      EscrowStatus  @default(HELD_IN_ESCROW)
+  providerRefundId  String?
+  refundReason      String?
+  refundedAt        DateTime?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  ticket Ticket @relation(fields: [ticketId], references: [id])
+
+  @@index([status])
+  @@index([providerOrderId])
+}
+
+model BoardingEvent {
+  id            String    @id @default(uuid())
+  ticketId      String    @unique
+  tripId        String
+  stopId        String?
+  scannedAt     DateTime  @default(now())
+  isOffline     Boolean   @default(false)
+  clientEventId String?   @unique
+  syncedAt      DateTime?
+  createdAt     DateTime  @default(now())
+
+  ticket Ticket @relation(fields: [ticketId], references: [id])
+  trip   Trip   @relation(fields: [tripId], references: [id])
+
+  @@index([tripId])
+}
+
+model ExitEvent {
+  id            String    @id @default(uuid())
+  ticketId      String    @unique
+  tripId        String
+  stopId        String?
+  exitedAt      DateTime  @default(now())
+  isOffline     Boolean   @default(false)
+  clientEventId String?   @unique
+  syncedAt      DateTime?
+  createdAt     DateTime  @default(now())
+
+  ticket Ticket @relation(fields: [ticketId], references: [id])
+  trip   Trip   @relation(fields: [tripId], references: [id])
+
+  @@index([tripId])
+}
+
+model Notification {
+  id        String           @id @default(uuid())
+  userId    String
+  tripId    String?
+  type      NotificationType
+  title     String
+  body      String
+  data      Json?            @default("{}")
+  isRead    Boolean          @default(false)
+  sentAt    DateTime?
+  createdAt DateTime         @default(now())
+
+  user User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  trip Trip? @relation(fields: [tripId], references: [id])
+
+  @@index([userId])
+  @@index([tripId])
+  @@index([isRead])
+}
+
+model JourneyShare {
+  id           String    @id @default(uuid())
+  ownerId      String
+  sharedWithId String?
+  shareToken   String    @unique @default(uuid())
+  tripId       String?
+  isActive     Boolean   @default(true)
+  expiresAt    DateTime?
+  createdAt    DateTime  @default(now())
+  revokedAt    DateTime?
+
+  owner      User  @relation("JourneyOwner", fields: [ownerId], references: [id])
+  sharedWith User? @relation("SharedWith", fields: [sharedWithId], references: [id])
+  trip       Trip? @relation(fields: [tripId], references: [id])
+
+  @@index([ownerId])
+  @@index([shareToken])
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  userId     String?
+  action     String
+  resource   String
+  resourceId String?
+  details    Json?    @default("{}")
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+}
+
+model IncidentReport {
+  id           String           @id @default(uuid())
+  tripId       String
+  reportedById String
+  severity     IncidentSeverity @default(MEDIUM)
+  description  String
+  delayMinutes Int?             @default(0)
+  latitude     Float?
+  longitude    Float?
+  isResolved   Boolean          @default(false)
+  resolvedAt   DateTime?
+  resolvedNote String?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  trip       Trip @relation(fields: [tripId], references: [id])
+  reportedBy User @relation("IncidentReports", fields: [reportedById], references: [id])
+
+  @@index([tripId])
+  @@index([isResolved])
+}
+
+model FrequentRoute {
+  id                String   @id @default(uuid())
+  passengerId       String
+  boardingStopId    String
+  destinationStopId String
+  routeId           String?
+  tripCount         Int      @default(1)
+  lastUsedAt        DateTime @default(now())
+  customLabel       String?
+  isPinned          Boolean  @default(false)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  passenger       User   @relation("FrequentRoutes", fields: [passengerId], references: [id])
+  boardingStop    Stop   @relation("BoardingStopFrequent", fields: [boardingStopId], references: [id])
+  destinationStop Stop   @relation("DestinationStopFrequent", fields: [destinationStopId], references: [id])
+
+  @@unique([passengerId, boardingStopId, destinationStopId])
+  @@index([passengerId])
+  @@index([lastUsedAt])
+}
+

@@ -1,0 +1,57 @@
+version: '3.9'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: smartbus_postgres
+    environment:
+      POSTGRES_USER: smartbus
+      POSTGRES_PASSWORD: smartbus_dev_pass
+      POSTGRES_DB: smartbus_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - smartbus_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U smartbus -d smartbus_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: smartbus_backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://smartbus:smartbus_dev_pass@postgres:5432/smartbus_db
+      NODE_ENV: development
+      PORT: 3000
+    env_file:
+      - .env
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+    command: npm run dev
+
+  web-admin:
+    build:
+      context: ./web-admin
+      dockerfile: Dockerfile
+    container_name: smartbus_web_admin
+    ports:
+      - "5173:5173"
+    environment:
+      VITE_API_BASE_URL: http://localhost:3000/api/v1
+    volumes:
+      - ./web-admin:/app
+      - /app/node_modules
+    command: npm run dev -- --host
+
+volumes:
+  smartbus_pgdata:

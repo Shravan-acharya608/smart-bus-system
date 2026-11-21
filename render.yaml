@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: smart-bus-backend
+    env: node
+    rootDir: backend
+    buildCommand: npm install && npx prisma generate && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3000
+      - key: DATABASE_URL
+        value: postgresql://neondb_owner:npg_cgrJ3TUkZ4oK@ep-fragrant-grass-b4aw9lvn.c-6.us-east-2.aws.neon.tech/neondb?sslmode=require&connect_timeout=30&pool_timeout=60
+      - key: JWT_SECRET
+        value: smartbus_jwt_production_secret_key_2026_xyz
