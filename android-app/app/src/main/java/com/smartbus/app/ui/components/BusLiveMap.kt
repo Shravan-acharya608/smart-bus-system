@@ -37,13 +37,13 @@ fun BusLiveMap(
 ) {
     val coroutineScope = rememberCoroutineScope()
 
-    // Default coordinate: Central Station (40.7128, -74.006) or first active bus location
+    // Default coordinate: Udupi Service Bus Stand (13.3409, 74.7421) or first active bus location
     val defaultLocation = remember(activeTrips) {
         val firstLoc = activeTrips.firstNotNullOfOrNull { it.lastLocation }
         if (firstLoc != null) {
             LatLng(firstLoc.latitude, firstLoc.longitude)
         } else {
-            LatLng(40.7128, -74.006)
+            LatLng(13.3409, 74.7421)
         }
     }
 
@@ -119,8 +119,9 @@ fun BusLiveMap(
                     }
                 }
 
-                // Bus Marker
-                trip.lastLocation?.let { loc ->
+                // Bus Marker (Live GPS or Fallback Scheduled Mode)
+                if (trip.lastLocation != null) {
+                    val loc = trip.lastLocation
                     val isStale = loc.isStale
                     val markerHue = if (isStale) {
                         BitmapDescriptorFactory.HUE_ORANGE
@@ -130,9 +131,22 @@ fun BusLiveMap(
 
                     Marker(
                         state = MarkerState(position = LatLng(loc.latitude, loc.longitude)),
-                        title = "Bus ${trip.bus?.busNumber ?: ""}",
+                        title = "Bus ${trip.bus?.busNumber ?: ""} (Live GPS)",
                         snippet = "Speed: ${loc.speed?.toInt() ?: 0} km/h • Route: ${trip.route?.code ?: ""}",
                         icon = BitmapDescriptorFactory.defaultMarker(markerHue),
+                        onClick = {
+                            onSelectTrip(trip)
+                            false
+                        }
+                    )
+                } else if (sortedStops.isNotEmpty()) {
+                    // Fallback when driver has not shared GPS: show on route origin/first stop
+                    val firstStop = sortedStops.first().stop
+                    Marker(
+                        state = MarkerState(position = LatLng(firstStop.latitude, firstStop.longitude)),
+                        title = "Bus ${trip.bus?.busNumber ?: ""} (Scheduled Route)",
+                        snippet = "Driver GPS Offline • Following route: ${trip.route?.name ?: ""}",
+                        icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_VIOLET),
                         onClick = {
                             onSelectTrip(trip)
                             false
@@ -257,12 +271,12 @@ fun BusLiveMap(
                                     )
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Surface(
-                                        color = if (loc?.isStale == true) Color(0xFFFEF3C7) else Color(0xFFD1FAE5),
+                                        color = if (loc == null) Color(0xFFE0E7FF) else if (loc.isStale) Color(0xFFFEF3C7) else Color(0xFFD1FAE5),
                                         shape = RoundedCornerShape(6.dp)
                                     ) {
                                         Text(
-                                            if (loc?.isStale == true) "Stale GPS" else "LIVE",
-                                            color = if (loc?.isStale == true) Color(0xFFB45309) else Color(0xFF047857),
+                                            if (loc == null) "SCHEDULED (NO GPS)" else if (loc.isStale) "Stale GPS" else "LIVE GPS",
+                                            color = if (loc == null) Color(0xFF3730A3) else if (loc.isStale) Color(0xFFB45309) else Color(0xFF047857),
                                             fontSize = 11.sp,
                                             fontWeight = FontWeight.Bold,
                                             modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
@@ -279,7 +293,7 @@ fun BusLiveMap(
                             // Speed Gauge
                             Surface(
                                 shape = RoundedCornerShape(10.dp),
-                                color = MaterialTheme.colorScheme.primaryContainer,
+                                color = if (loc != null) MaterialTheme.colorScheme.primaryContainer else Color(0xFFF1F5F9),
                                 modifier = Modifier.padding(start = 8.dp)
                             ) {
                                 Column(
@@ -287,18 +301,28 @@ fun BusLiveMap(
                                     horizontalAlignment = Alignment.CenterHorizontally
                                 ) {
                                     Text(
-                                        "${loc?.speed?.toInt() ?: 0}",
+                                        if (loc != null) "${loc.speed?.toInt() ?: 0}" else "Corridor",
                                         fontWeight = FontWeight.Bold,
-                                        fontSize = 18.sp,
-                                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                                        fontSize = if (loc != null) 18.sp else 12.sp,
+                                        color = if (loc != null) MaterialTheme.colorScheme.onPrimaryContainer else Color(0xFF475569)
                                     )
                                     Text(
-                                        "km/h",
+                                        if (loc != null) "km/h" else "Udupi-Shirva",
                                         fontSize = 10.sp,
-                                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                                        color = if (loc != null) MaterialTheme.colorScheme.onPrimaryContainer else Color(0xFF64748B)
                                     )
                                 }
                             }
+                        }
+
+                        if (loc == null) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                "ℹ️ Driver phone GPS not active. Showing general scheduled route & stops without live navigation.",
+                                fontSize = 11.sp,
+                                color = Color(0xFF475569),
+                                fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
+                            )
                         }
 
                         if (loc != null) {
