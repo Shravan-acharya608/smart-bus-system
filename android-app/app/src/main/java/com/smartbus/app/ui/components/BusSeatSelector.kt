@@ -55,6 +55,8 @@ fun BusSeatSelector(
 
     var selectedSeats by remember { mutableStateOf<Set<String>>(emptySet()) }
     val totalFare = selectedSeats.size * baseFare
+    var showPaymentModal by remember { mutableStateOf(false) }
+    var selectedPaymentMethod by remember { mutableStateOf("WALLET") } // WALLET, RAZORPAY, CASH
 
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -296,7 +298,7 @@ fun BusSeatSelector(
                         }
 
                         Button(
-                            onClick = { onConfirmBooking(selectedSeats.toList(), totalFare) },
+                            onClick = { showPaymentModal = true },
                             enabled = selectedSeats.isNotEmpty(),
                             modifier = Modifier
                                 .weight(1.2f)
@@ -306,7 +308,152 @@ fun BusSeatSelector(
                         ) {
                             Icon(Icons.Default.CheckCircle, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("Book Now", fontWeight = FontWeight.Bold)
+                            Text("Book Now (₹${totalFare.toInt()})", fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+        }
+
+        // Instant Payment Modal
+        if (showPaymentModal) {
+            androidx.compose.ui.window.Dialog(onDismissRequest = { showPaymentModal = false }) {
+                Card(
+                    shape = RoundedCornerShape(22.dp),
+                    modifier = Modifier.fillMaxWidth().padding(14.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(20.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text("Confirm Ticket & Pay", fontWeight = FontWeight.ExtraBold, fontSize = 18.sp, color = TransitNavy)
+                        Text("$routeName • $busNumber", fontSize = 12.sp, color = Color.Gray)
+
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        // Fare breakdown box
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = Color(0xFFF8FAFC),
+                            border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                    Text("Selected Seats:", fontSize = 12.sp, color = Color.Gray)
+                                    Text(selectedSeats.sorted().joinToString(", "), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                }
+                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                    Text("Fare per Seat:", fontSize = 12.sp, color = Color.Gray)
+                                    Text("₹${baseFare.toInt()}", fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                                }
+                                Divider(color = Color(0xFFE2E8F0), thickness = 1.dp)
+                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                    Text("Total Payable:", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = TransitNavy)
+                                    Text("₹${totalFare.toInt()}", fontWeight = FontWeight.ExtraBold, fontSize = 20.sp, color = TransitPrimary)
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text("Select Payment Method", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color(0xFF334155), modifier = Modifier.align(Alignment.Start))
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        // Option 1: 1-Tap Transit Wallet (Instant Tap & Pay)
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            border = BorderStroke(1.5.dp, if (selectedPaymentMethod == "WALLET") TransitPrimary else Color(0xFFE2E8F0)),
+                            color = if (selectedPaymentMethod == "WALLET") Color(0xFFF0F9FF) else Color.White,
+                            modifier = Modifier.fillMaxWidth().clickable { selectedPaymentMethod = "WALLET" }
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                RadioButton(selected = selectedPaymentMethod == "WALLET", onClick = { selectedPaymentMethod = "WALLET" })
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Column {
+                                    Text("⚡ Instant 1-Tap Transit Wallet", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = TransitNavy)
+                                    Text("Fastest checkout • Direct wallet deduction", fontSize = 10.sp, color = Color.Gray)
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        // Option 2: Razorpay UPI / Cards
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            border = BorderStroke(1.5.dp, if (selectedPaymentMethod == "RAZORPAY") TransitPrimary else Color(0xFFE2E8F0)),
+                            color = if (selectedPaymentMethod == "RAZORPAY") Color(0xFFF0F9FF) else Color.White,
+                            modifier = Modifier.fillMaxWidth().clickable { selectedPaymentMethod = "RAZORPAY" }
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                RadioButton(selected = selectedPaymentMethod == "RAZORPAY", onClick = { selectedPaymentMethod = "RAZORPAY" })
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Column {
+                                    Text("💳 Razorpay (UPI / GPay / PhonePe / Card)", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = TransitNavy)
+                                    Text("Instant online UPI or debit/credit payment", fontSize = 10.sp, color = Color.Gray)
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        // Option 3: Hold & Pay to Conductor
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            border = BorderStroke(1.5.dp, if (selectedPaymentMethod == "CASH") TransitPrimary else Color(0xFFE2E8F0)),
+                            color = if (selectedPaymentMethod == "CASH") Color(0xFFF0F9FF) else Color.White,
+                            modifier = Modifier.fillMaxWidth().clickable { selectedPaymentMethod = "CASH" }
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                RadioButton(selected = selectedPaymentMethod == "CASH", onClick = { selectedPaymentMethod = "CASH" })
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Column {
+                                    Text("🎟️ Pay Conductor on Boarding", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = TransitNavy)
+                                    Text("Hold seat now • Pay cash/UPI on the bus", fontSize = 10.sp, color = Color.Gray)
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(18.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = { showPaymentModal = false },
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                Text("Cancel")
+                            }
+
+                            Button(
+                                onClick = {
+                                    showPaymentModal = false
+                                    if (selectedPaymentMethod == "CASH") {
+                                        onHoldBooking(selectedSeats.toList(), totalFare)
+                                    } else {
+                                        onConfirmBooking(selectedSeats.toList(), totalFare)
+                                    }
+                                },
+                                modifier = Modifier.weight(1.5f),
+                                shape = RoundedCornerShape(10.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = BusGreen)
+                            ) {
+                                Text("Pay ₹${totalFare.toInt()}", fontWeight = FontWeight.Bold)
+                            }
                         }
                     }
                 }

@@ -65,6 +65,9 @@ fun PassengerDashboardScreen(
     // Dialog states
     var selectedTripForBooking by remember { mutableStateOf<Trip?>(null) }
     var qrTicketToShow by remember { mutableStateOf<Ticket?>(null) }
+    var showPermanentPassModal by remember { mutableStateOf(false) }
+    var showPrintableIdCard by remember { mutableStateOf(false) }
+    var permanentPassCode by remember { mutableStateOf("KA-PASS-8842") }
     var activeShareLink by remember { mutableStateOf<String?>(null) }
     var statusMessage by remember { mutableStateOf<String?>(null) }
 
@@ -121,6 +124,9 @@ fun PassengerDashboardScreen(
                     )
                 },
                 actions = {
+                    IconButton(onClick = { showPermanentPassModal = true }) {
+                        Icon(Icons.Default.Badge, contentDescription = "Permanent Pass", tint = Color.White)
+                    }
                     IconButton(onClick = { refreshData() }) {
                         Icon(Icons.Default.Refresh, contentDescription = "Refresh", tint = Color.White)
                     }
@@ -247,6 +253,7 @@ fun PassengerDashboardScreen(
                     }
                 )
                 3 -> ProfileTab(
+                    onOpenPermanentPass = { showPermanentPassModal = true },
                     onLogout = {
                         scope.launch {
                             app.authRepository.logout()
@@ -357,6 +364,204 @@ fun PassengerDashboardScreen(
                     Spacer(modifier = Modifier.height(16.dp))
                     Button(onClick = { qrTicketToShow = null }, modifier = Modifier.fillMaxWidth()) {
                         Text("Close")
+                    }
+                }
+            }
+        }
+    }
+
+    // Permanent Smart Transit Pass Modal
+    if (showPermanentPassModal) {
+        val qrPayload = "SMARTBUS-PASS:$permanentPassCode:Alice Passenger"
+        val qrBitmap = remember(qrPayload) { generateQrCode(qrPayload) }
+
+        Dialog(onDismissRequest = { showPermanentPassModal = false }) {
+            Card(
+                shape = RoundedCornerShape(22.dp),
+                modifier = Modifier.fillMaxWidth().padding(12.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(20.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    // Smart Card Top Header
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text("KARNATAKA TRANSIT PASS", fontWeight = FontWeight.ExtraBold, fontSize = 13.sp, color = Color(0xFF0F172A))
+                            Text("SmartBus Permanent Digital ID", fontSize = 11.sp, color = Color(0xFF0284C7), fontWeight = FontWeight.SemiBold)
+                        }
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = Color(0xFFDCFCE7)
+                        ) {
+                            Text("ACTIVE", color = Color(0xFF15803D), fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    // QR Display Container
+                    Box(
+                        modifier = Modifier
+                            .size(200.dp)
+                            .background(Color(0xFFF8FAFC), RoundedCornerShape(16.dp))
+                            .padding(10.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (qrBitmap != null) {
+                            Image(
+                                bitmap = qrBitmap.asImageBitmap(),
+                                contentDescription = "Permanent Transit Pass QR",
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        } else {
+                            CircularProgressIndicator(modifier = Modifier.size(36.dp))
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text("Pass ID: $permanentPassCode", fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 15.sp, color = Color(0xFF0F172A))
+                    Text("Holder: Alice Passenger", fontSize = 13.sp, color = Color.Gray)
+                    Text("Corridor: Udupi – Katpadi – Shirva", fontSize = 11.sp, color = Color(0xFF0284C7))
+
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = Color(0xFFF1F5F9),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            "ℹ️ Permanent QR: Valid indefinitely until you reset it. Present this to the conductor on boarding, or print it out to stick on your card.",
+                            fontSize = 11.sp,
+                            color = Color(0xFF475569),
+                            modifier = Modifier.padding(10.dp),
+                            lineHeight = 15.sp
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = {
+                                showPrintableIdCard = true
+                            },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Icon(Icons.Default.Print, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Print Card", fontSize = 12.sp)
+                        }
+
+                        Button(
+                            onClick = { showPermanentPassModal = false },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Text("Done", fontSize = 12.sp)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Printable Physical ID Badge Dialog
+    if (showPrintableIdCard) {
+        val qrPayload = "SMARTBUS-PASS:$permanentPassCode:Alice Passenger"
+        val qrBitmap = remember(qrPayload) { generateQrCode(qrPayload) }
+
+        Dialog(onDismissRequest = { showPrintableIdCard = false }) {
+            Card(
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier.fillMaxWidth().padding(12.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                elevation = CardDefaults.cardElevation(defaultElevation = 10.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text("Printable Smart Transit Card Badge", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    Text("Stick-on / Wallet Size (CR80 Standard)", fontSize = 11.sp, color = Color.Gray)
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Physical Card Preview Box
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Color(0xFF0F172A), RoundedCornerShape(14.dp))
+                            .padding(16.dp)
+                    ) {
+                        Column {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("KARNATAKA SMARTBUS", color = Color(0xFFF59E0B), fontWeight = FontWeight.ExtraBold, fontSize = 11.sp, letterSpacing = 1.sp)
+                                Text("TRANSIT PASS", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 10.sp)
+                            }
+
+                            Spacer(modifier = Modifier.height(10.dp))
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text("ALICE PASSENGER", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                    Text("Pass: $permanentPassCode", color = Color(0xFF94A3B8), fontFamily = FontFamily.Monospace, fontSize = 11.sp)
+                                    Text("Route: Udupi - Shirva", color = Color(0xFF38BDF8), fontSize = 11.sp)
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                    Text("VALID PERMANENTLY", color = Color(0xFF10B981), fontWeight = FontWeight.Bold, fontSize = 10.sp)
+                                }
+
+                                if (qrBitmap != null) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(75.dp)
+                                            .background(Color.White, RoundedCornerShape(8.dp))
+                                            .padding(4.dp)
+                                    ) {
+                                        Image(
+                                            bitmap = qrBitmap.asImageBitmap(),
+                                            contentDescription = "Card QR",
+                                            modifier = Modifier.fillMaxSize()
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        "✂️ You can screenshot this badge, print it on paper/PVC, and stick it on your physical ID or wallet. The conductor's app will scan it just like a physical bus pass.",
+                        fontSize = 11.sp,
+                        color = Color(0xFF475569),
+                        lineHeight = 15.sp
+                    )
+
+                    Spacer(modifier = Modifier.height(14.dp))
+                    Button(
+                        onClick = { showPrintableIdCard = false },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Text("Close Card Preview")
                     }
                 }
             }
@@ -719,7 +924,10 @@ fun MyTicketsTab(
 }
 
 @Composable
-fun ProfileTab(onLogout: () -> Unit) {
+fun ProfileTab(
+    onOpenPermanentPass: () -> Unit,
+    onLogout: () -> Unit
+) {
     var walletBalance by remember { mutableStateOf(250.0) }
     var showAddMoneyDialog by remember { mutableStateOf(false) }
 
@@ -744,7 +952,46 @@ fun ProfileTab(onLogout: () -> Unit) {
         Text("Passenger Account", fontWeight = FontWeight.ExtraBold, fontSize = 20.sp)
         Text("SmartBus Transit Member • Verified", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
 
-        Spacer(modifier = Modifier.height(20.dp))
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Permanent Smart Transit ID Pass Card
+        Card(
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B)),
+            modifier = Modifier.fillMaxWidth(),
+            elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+        ) {
+            Row(
+                modifier = Modifier.padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                    Surface(
+                        shape = CircleShape,
+                        color = Color(0xFFF59E0B),
+                        modifier = Modifier.size(44.dp)
+                    ) {
+                        Icon(Icons.Default.Badge, contentDescription = null, tint = Color.Black, modifier = Modifier.padding(10.dp))
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column {
+                        Text("Permanent Transit Pass", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Color.White)
+                        Text("Stick-on / Printable ID • Valid 24/7", fontSize = 11.sp, color = Color(0xFF94A3B8))
+                    }
+                }
+                Button(
+                    onClick = onOpenPermanentPass,
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0284C7)),
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                ) {
+                    Text("View Card", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(14.dp))
 
         // SmartBus Transit Wallet Card
         Card(

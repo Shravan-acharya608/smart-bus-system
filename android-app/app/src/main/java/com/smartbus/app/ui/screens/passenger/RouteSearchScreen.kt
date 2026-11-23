@@ -53,6 +53,19 @@ fun RouteSearchScreen(
     val boardingStopName = stops.find { it.id == selectedBoardingStopId }?.name ?: ""
     val destStopName = stops.find { it.id == selectedDestStopId }?.name ?: ""
 
+    var boardingQuery by remember(boardingStopName) { mutableStateOf(boardingStopName) }
+    var destQuery by remember(destStopName) { mutableStateOf(destStopName) }
+
+    val filteredBoardingStops = remember(stops, boardingQuery) {
+        if (boardingQuery.isBlank()) stops
+        else stops.filter { it.name.contains(boardingQuery, ignoreCase = true) }
+    }
+
+    val filteredDestStops = remember(stops, destQuery) {
+        if (destQuery.isBlank()) stops
+        else stops.filter { it.name.contains(destQuery, ignoreCase = true) }
+    }
+
     // Filter results
     val filteredResults = remember(busResults, selectedFilterChip) {
         when (selectedFilterChip) {
@@ -126,16 +139,22 @@ fun RouteSearchScreen(
                     // Origin & Destination with Swap Button
                     Box(modifier = Modifier.fillMaxWidth()) {
                         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                            // From Stop
+                            // From Stop (Type or Select)
                             ExposedDropdownMenuBox(
                                 expanded = showBoardingDropdown,
                                 onExpandedChange = { showBoardingDropdown = it }
                             ) {
                                 OutlinedTextField(
-                                    value = boardingStopName,
-                                    onValueChange = {},
-                                    readOnly = true,
-                                    label = { Text("From (Boarding Stop)") },
+                                    value = boardingQuery,
+                                    onValueChange = {
+                                        boardingQuery = it
+                                        showBoardingDropdown = true
+                                        val match = stops.find { s -> s.name.equals(it.trim(), ignoreCase = true) }
+                                        if (match != null) onSelectBoardingStop(match.id)
+                                    },
+                                    readOnly = false,
+                                    label = { Text("From (Type or Select Stop)") },
+                                    placeholder = { Text("e.g. Udupi, Katpadi...") },
                                     leadingIcon = {
                                         Icon(
                                             Icons.Default.TripOrigin,
@@ -152,13 +171,14 @@ fun RouteSearchScreen(
                                 )
 
                                 ExposedDropdownMenu(
-                                    expanded = showBoardingDropdown,
+                                    expanded = showBoardingDropdown && filteredBoardingStops.isNotEmpty(),
                                     onDismissRequest = { showBoardingDropdown = false }
                                 ) {
-                                    stops.forEach { stop ->
+                                    filteredBoardingStops.forEach { stop ->
                                         DropdownMenuItem(
                                             text = { Text(stop.name) },
                                             onClick = {
+                                                boardingQuery = stop.name
                                                 onSelectBoardingStop(stop.id)
                                                 showBoardingDropdown = false
                                             }
@@ -167,16 +187,22 @@ fun RouteSearchScreen(
                                 }
                             }
 
-                            // To Stop
+                            // To Stop (Type or Select)
                             ExposedDropdownMenuBox(
                                 expanded = showDestDropdown,
                                 onExpandedChange = { showDestDropdown = it }
                             ) {
                                 OutlinedTextField(
-                                    value = destStopName,
-                                    onValueChange = {},
-                                    readOnly = true,
-                                    label = { Text("To (Destination Stop)") },
+                                    value = destQuery,
+                                    onValueChange = {
+                                        destQuery = it
+                                        showDestDropdown = true
+                                        val match = stops.find { s -> s.name.equals(it.trim(), ignoreCase = true) }
+                                        if (match != null) onSelectDestStop(match.id)
+                                    },
+                                    readOnly = false,
+                                    label = { Text("To (Type or Select Destination)") },
+                                    placeholder = { Text("e.g. Shirva, Shankarapura...") },
                                     leadingIcon = {
                                         Icon(
                                             Icons.Default.LocationOn,
@@ -193,13 +219,14 @@ fun RouteSearchScreen(
                                 )
 
                                 ExposedDropdownMenu(
-                                    expanded = showDestDropdown,
+                                    expanded = showDestDropdown && filteredDestStops.isNotEmpty(),
                                     onDismissRequest = { showDestDropdown = false }
                                 ) {
-                                    stops.forEach { stop ->
+                                    filteredDestStops.forEach { stop ->
                                         DropdownMenuItem(
                                             text = { Text(stop.name) },
                                             onClick = {
+                                                destQuery = stop.name
                                                 onSelectDestStop(stop.id)
                                                 showDestDropdown = false
                                             }

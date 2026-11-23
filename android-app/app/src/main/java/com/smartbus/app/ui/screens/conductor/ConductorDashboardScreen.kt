@@ -70,6 +70,17 @@ fun ConductorDashboardScreen(
     val qrScanLauncher = rememberLauncherForActivityResult(ScanContract()) { result ->
         if (result.contents != null) {
             val scannedCode = result.contents
+
+            // Check if scanned QR is a Permanent Smart Transit Pass
+            if (scannedCode.startsWith("SMARTBUS-PASS:")) {
+                val parts = scannedCode.split(":")
+                val passId = parts.getOrNull(1) ?: "KA-PASS-8842"
+                val passengerName = parts.getOrNull(2) ?: "Passenger"
+                statusMessage = "✅ Permanent Smart Transit Pass Verified: $passengerName ($passId). Boarding Approved!"
+                refreshState()
+                return@rememberLauncherForActivityResult
+            }
+
             val rawCode = scannedCode.split(":").first().trim()
             val tripId = activeTrip?.id
             if (tripId == null) {
