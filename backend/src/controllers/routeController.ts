@@ -371,11 +371,22 @@ export async function getUdupiSchedules(req: AuthenticatedRequest, res: Response
         notes: true,
         status: true,
         bus: { select: { busNumber: true } },
+        route: {
+          select: {
+            stops: {
+              orderBy: { stopOrder: 'asc' },
+              select: { stopId: true, stopOrder: true, stop: { select: { name: true } } },
+            },
+          },
+        },
       },
-      take: 200,
+      take: 250,
     });
 
-    const tripBySlNo = new Map<number, { tripId: string; status: string; busNumber: string }>();
+    const tripBySlNo = new Map<
+      number,
+      { tripId: string; status: string; busNumber: string; routeStops: Array<{ stopId: string; name: string }> }
+    >();
     for (const t of dbTrips) {
       const m = t.notes?.match(/Sl\.No\s*#?(\d+)/i);
       if (m) {
@@ -383,13 +394,17 @@ export async function getUdupiSchedules(req: AuthenticatedRequest, res: Response
           tripId: t.id,
           status: t.status,
           busNumber: t.bus.busNumber,
+          routeStops: t.route.stops.map((rs) => ({ stopId: rs.stopId, name: rs.stop.name })),
         });
       }
     }
 
     let items = UDUPI_SCHEDULES.map((row) => {
-      const stops = buildStopsForSchedule(row);
       const linked = tripBySlNo.get(row.slNo);
+      const stops = buildStopsForSchedule(row).map((s) => {
+        const dbMatch = linked?.routeStops.find((rs) => rs.name.toLowerCase() === s.name.toLowerCase());
+        return { ...s, stopId: dbMatch?.stopId || null };
+      });
       return {
         slNo: row.slNo,
         busNumber: linked?.busNumber || `KA-20-UDP-${String(row.slNo).padStart(3, '0')}`,

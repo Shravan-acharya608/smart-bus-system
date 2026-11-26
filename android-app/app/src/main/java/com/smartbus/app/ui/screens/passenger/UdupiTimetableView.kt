@@ -24,6 +24,8 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.smartbus.app.data.model.*
 import com.smartbus.app.ui.components.BusLiveMap
+import com.smartbus.app.ui.components.BusSeatSelector
+import kotlin.math.*
 
 object UdupiLocalTimetable {
     private val coords = mapOf(
@@ -257,11 +259,45 @@ object UdupiLocalTimetable {
             buildItem(139, "Perdoor", "Brahamagiri, Santhekatte, Kolalgiri", "18.50")
         )
     }
+    fun distanceKm(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
+        val dLat = Math.toRadians(lat2 - lat1)
+        val dLon = Math.toRadians(lon2 - lon1)
+        val a = sin(dLat / 2).pow(2) + cos(Math.toRadians(lat1)) * cos(Math.toRadians(lat2)) * sin(dLon / 2).pow(2)
+        return 6371.0 * 2 * asin(sqrt(a))
+    }
+
+    fun findNearestPlace(lat: Double, lng: Double): Pair<String, Double> {
+        var bestName = "Udupi Bus Stand"
+        var bestDist = Double.MAX_VALUE
+        for ((_, info) in coords) {
+            val d = distanceKm(lat, lng, info.second.first, info.second.second)
+            if (d < bestDist) {
+                bestDist = d
+                bestName = info.first
+            }
+        }
+        return bestName to bestDist
+    }
+
+    fun estimateFareForBus(bus: UdupiScheduleItem): Double {
+        if (bus.stops.size < 2) return 20.0
+        var totalKm = 0.0
+        for (i in 1 until bus.stops.size) {
+            totalKm += distanceKm(bus.stops[i - 1].latitude, bus.stops[i - 1].longitude, bus.stops[i].latitude, bus.stops[i].longitude)
+        }
+        return maxOf(15.0, ((totalKm * 1.8) / 5.0).roundToInt() * 5.0)
+    }
 }
 
 @Composable
 fun UdupiTimetableView(
     schedules: List<UdupiScheduleItem>,
+    activeTrips: List<Trip> = emptyList(),
+    userLat: Double? = null,
+    userLng: Double? = null,
+    onRequestMyLocation: () -> Unit = {},
+    onBookScheduleSlot: ((UdupiScheduleItem, String) -> Unit)? = null,
+    onHoldScheduleSlot: ((UdupiScheduleItem) -> Unit)? = null,
     onSetWakeUpAlarmForStop: (UdupiStopCoord, String?) -> Unit,
     onClose: (() -> Unit)? = null
 ) {
@@ -306,7 +342,7 @@ fun UdupiTimetableView(
                             letterSpacing = 1.sp
                         )
                         Text(
-                            "${filteredBuses.size} of ${activeList.size} Departures • Tap any bus for Route & Map",
+                            "${filteredBuses.size} of ${activeList.size} Departures • Tap any bus for Map, Booking & Alert",
                             color = Color.White,
                             fontSize = 12.sp
                         )
@@ -362,11 +398,12 @@ fun UdupiTimetableView(
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             items(filteredBuses, key = { it.slNo }) { bus ->
+                val isOnline = activeTrips.any { it.id == bus.tripId && it.lastLocation != null }
                 Card(
                     onClick = { selectedBusForMap = bus },
                     shape = RoundedCornerShape(14.dp),
                     colors = CardDefaults.cardColors(containerColor = Color.White),
-                    border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
+                    border = BorderStroke(1.dp, if (isOnline) Color(0xFF10B981) else Color(0xFFE2E8F0)),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
@@ -375,7 +412,7 @@ fun UdupiTimetableView(
                     ) {
                         // Sl.No + Departure Time Pill
                         Surface(
-                            color = Color(0xFF0284C7),
+                            color = if (isOnline) Color(0xFF059669) else Color(0xFF0284C7),
                             shape = RoundedCornerShape(10.dp),
                             modifier = Modifier.width(68.dp)
                         ) {
@@ -391,26 +428,26 @@ fun UdupiTimetableView(
                         Spacer(modifier = Modifier.width(12.dp))
 
                         Column(modifier = Modifier.weight(1f)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(
-                                    "${bus.from} → ${bus.to}",
-                                    fontWeight = FontWeight.ExtraBold,
-                                    fontSize = 14.sp,
-                                    color = Color(0xFF0F172A)
-                                )
-                            }
                             Text(
-                                "Via: ${bus.via}",
-                                fontSize = 11.sp,
-                                color = Color(0xFF475569)
+                                "${bus.from} → ${bus.to}",
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 14.sp,
+                                color = Color(0xFF0F172A)
                             )
+                            Text("Via: ${bus.via}", fontSize = 11.sp, color = Color(0xFF475569))
                             Spacer(modifier = Modifier.height(4.dp))
                             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                 Surface(color = Color(0xFFF1F5F9), shape = RoundedCornerShape(6.dp)) {
                                     Text(bus.serviceClass, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
                                 }
-                                Surface(color = Color(0xFFE0F2FE), shape = RoundedCornerShape(6.dp)) {
-                                    Text("${bus.stops.size} stops • View Map", color = Color(0xFF0369A1), fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+                                if (isOnline) {
+                                    Surface(color = Color(0xFFDCFCE7), shape = RoundedCornerShape(6.dp)) {
+                                        Text("🟢 LIVE GPS", color = Color(0xFF15803D), fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+                                    }
+                                } else {
+                                    Surface(color = Color(0xFFE0F2FE), shape = RoundedCornerShape(6.dp)) {
+                                        Text("${bus.stops.size} stops • Map & Book", color = Color(0xFF0369A1), fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+                                    }
                                 }
                             }
                         }
@@ -422,115 +459,204 @@ fun UdupiTimetableView(
         }
     }
 
-    // Interactive Route Map & Stops Timeline Dialog when passenger selects ANY bus
+    // Reusable Selected Bus Map, Live Navigation, Booking & Alert Modal
     if (selectedBusForMap != null) {
-        val bus = selectedBusForMap!!
-        val routeStopsList = bus.stops.map { st ->
-            RouteStop(
-                id = "rs-${bus.slNo}-${st.order}",
-                stopId = "stop-${bus.slNo}-${st.order}",
-                stopOrder = st.order,
-                stop = Stop(id = "stop-${bus.slNo}-${st.order}", name = st.name, latitude = st.latitude, longitude = st.longitude)
-            )
-        }
-        val syntheticTrip = Trip(
-            id = bus.tripId ?: "schedule-${bus.slNo}",
-            busId = "bus-${bus.slNo}",
-            routeId = "route-${bus.slNo}",
-            status = bus.tripStatus,
-            scheduledStart = bus.departureTime,
-            bus = Bus(id = "bus-${bus.slNo}", busNumber = "#${bus.slNo} (${bus.departureTime})", registrationNo = bus.busNumber, capacity = 48),
-            route = Route(
-                id = "route-${bus.slNo}",
-                name = "${bus.from} → ${bus.to} (Via ${bus.via})",
-                code = "SL-${bus.slNo}",
-                stops = routeStopsList
-            ),
-            lastLocation = null
+        SelectedScheduleBusMapDialog(
+            bus = selectedBusForMap!!,
+            activeTrips = activeTrips,
+            userLat = userLat,
+            userLng = userLng,
+            onRequestMyLocation = onRequestMyLocation,
+            onBookSlot = onBookScheduleSlot,
+            onHoldSlot = onHoldScheduleSlot,
+            onSetWakeUpAlarmForStop = { stop, tripId ->
+                selectedBusForMap = null
+                onSetWakeUpAlarmForStop(stop, tripId)
+            },
+            onDismiss = { selectedBusForMap = null }
         )
+    }
+}
 
-        Dialog(
-            onDismissRequest = { selectedBusForMap = null },
-            properties = DialogProperties(usePlatformDefaultWidth = false)
-        ) {
-            Surface(modifier = Modifier.fillMaxSize(), color = Color.White) {
-                Column(modifier = Modifier.fillMaxSize()) {
-                    // Top Bar
-                    Surface(color = Color(0xFF0F172A)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            IconButton(onClick = { selectedBusForMap = null }) {
-                                Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = Color.White)
+@Composable
+fun SelectedScheduleBusMapDialog(
+    bus: UdupiScheduleItem,
+    activeTrips: List<Trip>,
+    userLat: Double?,
+    userLng: Double?,
+    onRequestMyLocation: () -> Unit,
+    onBookSlot: ((UdupiScheduleItem, String) -> Unit)? = null,
+    onHoldSlot: ((UdupiScheduleItem) -> Unit)? = null,
+    onSetWakeUpAlarmForStop: (UdupiStopCoord, String?) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var showSeatPicker by remember { mutableStateOf(false) }
+
+    val matchingActiveTrip = remember(bus.tripId, bus.busNumber, activeTrips) {
+        activeTrips.find { it.id == bus.tripId }
+            ?: activeTrips.find { it.route?.name?.contains(bus.to, ignoreCase = true) == true }
+    }
+
+    val routeStopsList = bus.stops.map { st ->
+        RouteStop(
+            id = "rs-${bus.slNo}-${st.order}",
+            stopId = "stop-${bus.slNo}-${st.order}",
+            stopOrder = st.order,
+            stop = Stop(id = "stop-${bus.slNo}-${st.order}", name = st.name, latitude = st.latitude, longitude = st.longitude)
+        )
+    }
+    val mapTrip = Trip(
+        id = matchingActiveTrip?.id ?: bus.tripId ?: "schedule-${bus.slNo}",
+        busId = "bus-${bus.slNo}",
+        routeId = "route-${bus.slNo}",
+        status = matchingActiveTrip?.status ?: bus.tripStatus,
+        scheduledStart = bus.departureTime,
+        bus = Bus(id = "bus-${bus.slNo}", busNumber = "#${bus.slNo} (${bus.departureTime})", registrationNo = bus.busNumber, capacity = 48),
+        route = Route(
+            id = "route-${bus.slNo}",
+            name = "${bus.from} → ${bus.to} (Via ${bus.via})",
+            code = "SL-${bus.slNo}",
+            stops = routeStopsList
+        ),
+        lastLocation = matchingActiveTrip?.lastLocation
+    )
+
+    if (showSeatPicker) {
+        BusSeatSelector(
+            busNumber = "#${bus.slNo} (${bus.departureTime})",
+            routeName = "${bus.from} → ${bus.to} (Via ${bus.via})",
+            baseFare = UdupiLocalTimetable.estimateFareForBus(bus),
+            availableSeatsCount = 32,
+            onConfirmBooking = { _, _, paymentMode ->
+                showSeatPicker = false
+                onBookSlot?.invoke(bus, paymentMode)
+                onDismiss()
+            },
+            onHoldBooking = { _, _ ->
+                showSeatPicker = false
+                onHoldSlot?.invoke(bus)
+                onDismiss()
+            },
+            onDismiss = { showSeatPicker = false }
+        )
+        return
+    }
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Surface(modifier = Modifier.fillMaxSize(), color = Color.White) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                // Top Bar
+                Surface(color = Color(0xFF0F172A)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        IconButton(onClick = onDismiss) {
+                            Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = Color.White)
+                        }
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Sl.No #${bus.slNo}: ${bus.from} → ${bus.to}", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                            Text("Dep ${bus.departureTime} • ${bus.serviceClass} • Via ${bus.via}", color = Color(0xFF38BDF8), fontSize = 11.sp)
+                        }
+                    }
+                }
+
+                // Interactive OSRM Road Map + Live Navigation (if online) + Passenger Current Location Blue Pin
+                Box(modifier = Modifier.fillMaxWidth().height(300.dp)) {
+                    BusLiveMap(
+                        activeTrips = listOf(mapTrip),
+                        selectedTrip = mapTrip,
+                        onSelectTrip = {},
+                        userLat = userLat,
+                        userLng = userLng,
+                        onRequestMyLocation = onRequestMyLocation
+                    )
+                }
+
+                // Book Slot & Wake Alert Quick Bar
+                if (onBookSlot != null || onHoldSlot != null) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        if (onHoldSlot != null) {
+                            OutlinedButton(
+                                onClick = {
+                                    onHoldSlot(bus)
+                                    onDismiss()
+                                },
+                                modifier = Modifier.weight(1f).height(44.dp),
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                Icon(Icons.Default.HourglassTop, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Hold Slot", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                             }
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text("Sl.No #${bus.slNo}: ${bus.from} → ${bus.to}", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                                Text("Dep ${bus.departureTime} • ${bus.serviceClass} • Via ${bus.via}", color = Color(0xFF38BDF8), fontSize = 11.sp)
+                        }
+                        if (onBookSlot != null) {
+                            Button(
+                                onClick = { showSeatPicker = true },
+                                modifier = Modifier.weight(1.3f).height(44.dp),
+                                shape = RoundedCornerShape(10.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0284C7))
+                            ) {
+                                Icon(Icons.Default.AirlineSeatReclineNormal, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Book Slot • ₹${UdupiLocalTimetable.estimateFareForBus(bus).toInt()}", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                             }
                         }
                     }
+                }
 
-                    // Interactive OSRM Road Map showing full route & via stops
-                    Box(modifier = Modifier.fillMaxWidth().height(320.dp)) {
-                        BusLiveMap(
-                            activeTrips = listOf(syntheticTrip),
-                            selectedTrip = syntheticTrip,
-                            onSelectTrip = {}
-                        )
-                    }
-
-                    // Ordered Route Stops & Quick Wake-Up Alarm Setup
-                    Text(
-                        "Route Stops (${bus.stops.size} Stops along OSRM Highway Corridor)",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 13.sp,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
-                    )
-                    LazyColumn(
-                        modifier = Modifier.weight(1f).padding(horizontal = 16.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        items(bus.stops) { stop ->
-                            Card(
-                                shape = RoundedCornerShape(12.dp),
-                                colors = CardDefaults.cardColors(containerColor = Color(0xFFF8FAFC)),
-                                border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
-                                modifier = Modifier.fillMaxWidth()
+                Text(
+                    "Route Stops (${bus.stops.size} Stops • Tap Wake Alarm before sleeping)",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
+                )
+                LazyColumn(
+                    modifier = Modifier.weight(1f).padding(horizontal = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(bus.stops) { stop ->
+                        Card(
+                            shape = RoundedCornerShape(12.dp),
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFFF8FAFC)),
+                            border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(12.dp).fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Row(
-                                    modifier = Modifier.padding(12.dp).fillMaxWidth(),
-                                    verticalAlignment = Alignment.CenterVertically
+                                Box(
+                                    modifier = Modifier.size(28.dp).clip(CircleShape).background(Color(0xFF0284C7)),
+                                    contentAlignment = Alignment.Center
                                 ) {
-                                    Box(
-                                        modifier = Modifier.size(28.dp).clip(CircleShape).background(Color(0xFF0284C7)),
-                                        contentAlignment = Alignment.Center
+                                    Text("${stop.order}", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                }
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(stop.name, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                    Text(
+                                        if (stop.order == 1) "Departure ${bus.departureTime} • Udupi Bus Stand"
+                                        else if (stop.order == bus.stops.size) "Final Destination"
+                                        else "Via Stop #${stop.order}",
+                                        fontSize = 11.sp,
+                                        color = Color.Gray
+                                    )
+                                }
+                                if (stop.order > 1) {
+                                    FilledTonalButton(
+                                        onClick = { onSetWakeUpAlarmForStop(stop, mapTrip.id) },
+                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
                                     ) {
-                                        Text("${stop.order}", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                                    }
-                                    Spacer(modifier = Modifier.width(12.dp))
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(stop.name, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                                        Text(
-                                            if (stop.order == 1) "Departure ${bus.departureTime} • Udupi Bus Stand"
-                                            else if (stop.order == bus.stops.size) "Final Destination"
-                                            else "Via Stop #${stop.order}",
-                                            fontSize = 11.sp,
-                                            color = Color.Gray
-                                        )
-                                    }
-                                    if (stop.order > 1) {
-                                        FilledTonalButton(
-                                            onClick = {
-                                                selectedBusForMap = null
-                                                onSetWakeUpAlarmForStop(stop, bus.tripId)
-                                            },
-                                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
-                                        ) {
-                                            Icon(Icons.Default.AlarmAdd, contentDescription = null, modifier = Modifier.size(15.dp))
-                                            Spacer(modifier = Modifier.width(4.dp))
-                                            Text("Wake Alarm", fontSize = 11.sp)
-                                        }
+                                        Icon(Icons.Default.AlarmAdd, contentDescription = null, modifier = Modifier.size(15.dp))
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("Wake Alarm", fontSize = 11.sp)
                                     }
                                 }
                             }

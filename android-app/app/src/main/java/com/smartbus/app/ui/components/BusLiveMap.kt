@@ -44,6 +44,9 @@ fun BusLiveMap(
     activeTrips: List<Trip>,
     selectedTrip: Trip?,
     onSelectTrip: (Trip) -> Unit,
+    userLat: Double? = null,
+    userLng: Double? = null,
+    onRequestMyLocation: (() -> Unit)? = null,
     onBookTicket: ((Trip) -> Unit)? = null,
     onShareJourney: ((String) -> Unit)? = null,
     modifier: Modifier = Modifier
@@ -51,7 +54,7 @@ fun BusLiveMap(
     var webViewRef by remember { mutableStateOf<WebView?>(null) }
     var isMapLoaded by remember { mutableStateOf(false) }
 
-    // Default coordinate: Udupi Service Bus Stand (13.3409, 74.7421)
+    // Default coordinate: Udupi Bus Stand (13.3409, 74.7421)
     val defaultLat = 13.3409
     val defaultLng = 74.7421
 
@@ -73,14 +76,14 @@ fun BusLiveMap(
         val terminalStop = sortedStops.lastOrNull()?.stop
         val destLat = terminalStop?.latitude ?: 13.2188
         val destLng = terminalStop?.longitude ?: 74.8223
-        val destName = terminalStop?.name ?: "Shirva Bus Stand"
+        val destName = terminalStop?.name ?: "Destination Stop"
 
         liveEtaInfo = withContext(Dispatchers.IO) {
             fetchOsrmEta(loc.latitude, loc.longitude, destLat, destLng, destName)
         }
     }
 
-    // Build compact JSON payload of trips & stops for Leaflet JS
+    // Build compact JSON payload of trips, stops & passenger current location
     val mapPayloadJson = remember(activeTrips, selectedTrip) {
         val tripsData = activeTrips.map { trip ->
             val sortedStops = (trip.route?.stops ?: emptyList()).sortedBy { it.stopOrder }
@@ -97,7 +100,7 @@ fun BusLiveMap(
             mapOf(
                 "id" to trip.id,
                 "busNumber" to (trip.bus?.busNumber ?: "KA-20-111"),
-                "routeName" to (trip.route?.name ?: "Udupi – Katpadi – Shirva"),
+                "routeName" to (trip.route?.name ?: "Udupi Bus Route"),
                 "hasLiveGps" to (loc != null),
                 "lat" to (loc?.latitude ?: fallbackStop?.latitude ?: defaultLat),
                 "lng" to (loc?.longitude ?: fallbackStop?.longitude ?: defaultLng),
@@ -109,9 +112,17 @@ fun BusLiveMap(
         Gson().toJson(tripsData)
     }
 
-    LaunchedEffect(mapPayloadJson, isMapLoaded) {
+    val userLocJson = remember(userLat, userLng) {
+        if (userLat != null && userLng != null) {
+            """{"lat":$userLat,"lng":$userLng}"""
+        } else {
+            "null"
+        }
+    }
+
+    LaunchedEffect(mapPayloadJson, userLocJson, isMapLoaded) {
         if (isMapLoaded) {
-            webViewRef?.evaluateJavascript("window.updateBusMap($mapPayloadJson);", null)
+            webViewRef?.evaluateJavascript("window.updateBusMap($mapPayloadJson, $userLocJson);", null)
         }
     }
 
@@ -126,8 +137,8 @@ fun BusLiveMap(
           <style>
             html, body, #map { height: 100%; width: 100%; margin: 0; padding: 0; background: #e2e8f0; }
             .bus-pin {
-              background: #0284C7; color: #fff; border: 2px solid #fff; border-radius: 16px;
-              padding: 4px 8px; font-family: sans-serif; font-weight: 700; font-size: 11px;
+              background: #059669; color: #fff; border: 2px solid #fff; border-radius: 16px;
+              padding: 4px 9px; font-family: sans-serif; font-weight: 700; font-size: 11px;
               box-shadow: 0 3px 10px rgba(0,0,0,0.35); white-space: nowrap;
             }
             .bus-pin.fallback { background: #D97706; }
@@ -136,6 +147,16 @@ fun BusLiveMap(
               width: 22px; height: 22px; line-height: 18px; text-align: center;
               font-family: sans-serif; font-size: 11px; font-weight: bold;
               box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+            }
+            .you-dot {
+              width: 18px; height: 18px; border-radius: 50%;
+              background: #2563EB; border: 3px solid #fff;
+              box-shadow: 0 0 0 6px rgba(37, 99, 235, 0.3), 0 2px 6px rgba(0,0,0,0.4);
+            }
+            .you-label {
+              background: #1E3A8A; color: #fff; font-size: 9px; font-weight: 800;
+              padding: 1px 5px; border-radius: 6px; margin-top: 2px;
+              font-family: sans-serif; white-space: nowrap; text-align: center;
             }
           </style>
         </head>
@@ -149,15 +170,16 @@ fun BusLiveMap(
             }).addTo(map);
 
             const layerGroup = L.layerGroup().addTo(map);
-            let hasFitted = false;
+            let lastRouteSignature = '';
             const osrmRouteCache = {};
+            let lastUserLoc = null;
 
             const defaultStops = [
-              { order: 1, name: 'Udupi Service Bus Stand', lat: 13.3409, lng: 74.7421 },
+              { order: 1, name: 'Udupi Bus Stand', lat: 13.3409, lng: 74.7421 },
               { order: 2, name: 'Kinnimulki', lat: 13.3235, lng: 74.7388 },
-              { order: 3, name: 'Katpadi Junction', lat: 13.2848, lng: 74.7505 },
-              { order: 4, name: 'Shankarapura', lat: 13.2603, lng: 74.7712 },
-              { order: 5, name: 'Shirva Bus Stand', lat: 13.2188, lng: 74.8223 }
+              { order: 3, name: 'Katpadi', lat: 13.2848, lng: 74.7505 },
+              { order: 4, name: 'Shankarpura', lat: 13.2603, lng: 74.7712 },
+              { order: 5, name: 'Shirva', lat: 13.2188, lng: 74.8223 }
             ];
 
             function drawRoadPolyline(stops, styleOpts) {
@@ -180,11 +202,13 @@ fun BusLiveMap(
               }
             }
 
-            window.updateBusMap = function(trips) {
+            window.updateBusMap = function(trips, userLoc) {
               layerGroup.clearLayers();
               const bounds = [];
+              let sig = '';
 
               if (!trips || trips.length === 0) {
+                sig = 'default';
                 drawRoadPolyline(defaultStops, { color: '#0284C7', weight: 5, opacity: 0.8 });
                 defaultStops.forEach(s => {
                   L.marker([s.lat, s.lng], {
@@ -194,41 +218,63 @@ fun BusLiveMap(
                 });
               } else {
                 trips.forEach(t => {
+                  sig += t.id + '|';
                   const stops = (t.stops && t.stops.length > 0) ? t.stops : defaultStops;
                   drawRoadPolyline(stops, {
-                    color: t.hasLiveGps ? '#0284C7' : '#D97706',
+                    color: t.hasLiveGps ? '#059669' : '#0284C7',
                     weight: t.isSelected ? 6 : 4,
-                    opacity: 0.85,
-                    dashArray: t.hasLiveGps ? null : '8, 6'
+                    opacity: 0.88,
+                    dashArray: t.hasLiveGps ? null : '7, 5'
                   });
 
                   stops.forEach(s => {
                     L.marker([s.lat, s.lng], {
                       icon: L.divIcon({ className: '', html: '<div class="stop-pin">' + s.order + '</div>', iconSize: [22, 22] })
-                    }).bindPopup('<b>' + s.name + '</b><br/>Route: ' + t.routeName).addTo(layerGroup);
+                    }).bindPopup('<b>' + s.name + '</b><br/>Stop #' + s.order).addTo(layerGroup);
                     bounds.push([s.lat, s.lng]);
                   });
 
                   const badgeClass = t.hasLiveGps ? 'bus-pin' : 'bus-pin fallback';
                   const label = t.hasLiveGps
-                    ? '🚌 ' + t.busNumber + ' • ' + Math.round(t.speed) + ' km/h'
-                    : '📍 ' + t.busNumber + ' (Scheduled Route)';
+                    ? '🚌 LIVE ' + t.busNumber + ' • ' + Math.round(t.speed) + ' km/h'
+                    : '🚌 ' + t.busNumber + ' (Route View)';
 
                   L.marker([t.lat, t.lng], {
-                    icon: L.divIcon({ className: '', html: '<div class="' + badgeClass + '">' + label + '</div>', iconSize: [140, 28] })
-                  }).bindPopup('<b>Bus ' + t.busNumber + '</b><br/>' + t.routeName + '<br/>' + (t.hasLiveGps ? 'Live Driver Phone GPS' : 'General Route Fallback (GPS Offline)')).addTo(layerGroup);
+                    icon: L.divIcon({ className: '', html: '<div class="' + badgeClass + '">' + label + '</div>', iconSize: [145, 28] })
+                  }).bindPopup('<b>Bus ' + t.busNumber + '</b><br/>' + t.routeName + '<br/>' + (t.hasLiveGps ? '🟢 Live Driver GPS Online' : '📍 Scheduled Route (Driver GPS Offline)')).addTo(layerGroup);
                   bounds.push([t.lat, t.lng]);
                 });
               }
 
-              if (!hasFitted && bounds.length > 0) {
-                map.fitBounds(bounds, { padding: [35, 35] });
-                hasFitted = true;
+              // Render Passenger Current Location Blue Pin ("You")
+              if (userLoc && userLoc.lat && userLoc.lng) {
+                lastUserLoc = userLoc;
+                L.marker([userLoc.lat, userLoc.lng], {
+                  icon: L.divIcon({
+                    className: '',
+                    html: '<div style="display:flex;flex-direction:column;align-items:center;"><div class="you-dot"></div><div class="you-label">YOU</div></div>',
+                    iconSize: [40, 36],
+                    iconAnchor: [20, 10]
+                  }),
+                  zIndexOffset: 1000
+                }).bindPopup('<b>📍 Your Current Location</b><br/>Lat: ' + userLoc.lat.toFixed(5) + ', Lng: ' + userLoc.lng.toFixed(5)).addTo(layerGroup);
+                bounds.push([userLoc.lat, userLoc.lng]);
+              }
+
+              if (sig !== lastRouteSignature && bounds.length > 0) {
+                map.fitBounds(bounds, { padding: [38, 38], maxZoom: 14 });
+                lastRouteSignature = sig;
               }
             };
 
             window.recenterMap = function() {
               map.setView([$defaultLat, $defaultLng], 12);
+            };
+
+            window.focusUserLocation = function() {
+              if (lastUserLoc && lastUserLoc.lat && lastUserLoc.lng) {
+                map.setView([lastUserLoc.lat, lastUserLoc.lng], 15, { animate: true });
+              }
             };
           </script>
         </body>
@@ -247,7 +293,7 @@ fun BusLiveMap(
                         override fun onPageFinished(view: WebView?, url: String?) {
                             super.onPageFinished(view, url)
                             isMapLoaded = true
-                            view?.evaluateJavascript("window.updateBusMap($mapPayloadJson);", null)
+                            view?.evaluateJavascript("window.updateBusMap($mapPayloadJson, $userLocJson);", null)
                         }
                     }
                     loadDataWithBaseURL("https://openstreetmap.org", leafletHtml, "text/html", "UTF-8", null)
@@ -275,32 +321,48 @@ fun BusLiveMap(
                     modifier = Modifier
                         .size(10.dp)
                         .clip(CircleShape)
-                        .background(if (hasAnyLiveGps) Color(0xFF10B981) else Color(0xFFD97706))
+                        .background(if (hasAnyLiveGps) Color(0xFF10B981) else Color(0xFF0284C7))
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
                     text = if (hasAnyLiveGps)
-                        "LIVE ROAD NAVIGATION • Udupi – Katpadi – Shirva"
+                        "LIVE BUS NAVIGATION • Driver GPS Online"
                     else
-                        "GENERAL ROUTE MODE • Driver GPS Offline",
+                        "BUS ROUTE MAP • OSRM Road Path" + if (userLat != null) " + Your GPS" else "",
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
-                    color = if (hasAnyLiveGps) Color(0xFF065F46) else Color(0xFF92400E)
+                    color = if (hasAnyLiveGps) Color(0xFF065F46) else Color(0xFF0C4A6E)
                 )
             }
         }
 
-        // Recenter Button
-        FloatingActionButton(
-            onClick = { webViewRef?.evaluateJavascript("window.recenterMap();", null) },
-            containerColor = Color.White,
-            contentColor = Color(0xFF0284C7),
+        // My Current Location & Recenter Buttons
+        Column(
             modifier = Modifier
                 .align(Alignment.TopEnd)
-                .padding(top = 60.dp, end = 14.dp)
-                .size(42.dp)
+                .padding(top = 58.dp, end = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Icon(Icons.Default.MyLocation, contentDescription = "Recenter", modifier = Modifier.size(20.dp))
+            FloatingActionButton(
+                onClick = {
+                    onRequestMyLocation?.invoke()
+                    webViewRef?.evaluateJavascript("window.focusUserLocation();", null)
+                },
+                containerColor = if (userLat != null) Color(0xFF2563EB) else Color.White,
+                contentColor = if (userLat != null) Color.White else Color(0xFF2563EB),
+                modifier = Modifier.size(42.dp)
+            ) {
+                Icon(Icons.Default.MyLocation, contentDescription = "My Current Location", modifier = Modifier.size(20.dp))
+            }
+
+            FloatingActionButton(
+                onClick = { webViewRef?.evaluateJavascript("window.recenterMap();", null) },
+                containerColor = Color.White,
+                contentColor = Color(0xFF0284C7),
+                modifier = Modifier.size(42.dp)
+            ) {
+                Icon(Icons.Default.DirectionsBus, contentDescription = "View Route", modifier = Modifier.size(20.dp))
+            }
         }
 
         // Bottom Sheet Card for Selected Bus
@@ -326,16 +388,16 @@ fun BusLiveMap(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
                                 Surface(
-                                    color = if (hasGps) Color(0xFFDBEAFE) else Color(0xFFFEF3C7),
+                                    color = if (hasGps) Color(0xFFDCFCE7) else Color(0xFFDBEAFE),
                                     shape = RoundedCornerShape(10.dp),
                                     modifier = Modifier.size(40.dp)
                                 ) {
                                     Icon(
                                         Icons.Default.DirectionsBus,
                                         contentDescription = null,
-                                        tint = if (hasGps) Color(0xFF0284C7) else Color(0xFFD97706),
+                                        tint = if (hasGps) Color(0xFF059669) else Color(0xFF0284C7),
                                         modifier = Modifier.padding(8.dp)
                                     )
                                 }
@@ -347,9 +409,10 @@ fun BusLiveMap(
                                         fontSize = 15.sp
                                     )
                                     Text(
-                                        focusTrip.route?.name ?: "Udupi – Katpadi – Shirva",
+                                        focusTrip.route?.name ?: "Udupi Bus Route",
                                         fontSize = 12.sp,
-                                        color = Color.Gray
+                                        color = Color.Gray,
+                                        maxLines = 1
                                     )
                                 }
                             }
@@ -378,10 +441,10 @@ fun BusLiveMap(
                                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Icon(Icons.Default.Schedule, contentDescription = null, tint = Color(0xFF15803D), modifier = Modifier.size(14.dp))
+                                    Icon(Icons.Default.Navigation, contentDescription = null, tint = Color(0xFF15803D), modifier = Modifier.size(14.dp))
                                     Spacer(modifier = Modifier.width(6.dp))
                                     Text(
-                                        "OSRM Road ETA: ~${liveEtaInfo!!.minutes} min (${String.format("%.1f", liveEtaInfo!!.distanceKm)} km) to ${liveEtaInfo!!.targetStopName}",
+                                        "Live Navigation ETA: ~${liveEtaInfo!!.minutes} min (${String.format("%.1f", liveEtaInfo!!.distanceKm)} km) to ${liveEtaInfo!!.targetStopName}",
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.SemiBold,
                                         color = Color(0xFF15803D)
@@ -391,37 +454,39 @@ fun BusLiveMap(
                         } else if (!hasGps) {
                             Spacer(modifier = Modifier.height(6.dp))
                             Text(
-                                "Driver phone GPS is paused/declined. Showing OSRM corridor roads & timetable.",
+                                "Bus GPS offline — showing route corridor" + if (userLat != null) " & your blue GPS pin." else ".",
                                 fontSize = 11.sp,
-                                color = Color(0xFF92400E)
+                                color = Color(0xFF64748B)
                             )
                         }
 
-                        Spacer(modifier = Modifier.height(10.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            if (onBookTicket != null) {
-                                Button(
-                                    onClick = { onBookTicket(focusTrip) },
-                                    modifier = Modifier.weight(1f),
-                                    shape = RoundedCornerShape(10.dp)
-                                ) {
-                                    Icon(Icons.Default.ConfirmationNumber, contentDescription = null, modifier = Modifier.size(16.dp))
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text("Book Ticket", fontSize = 12.sp)
+                        if (onBookTicket != null || onShareJourney != null) {
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                if (onBookTicket != null) {
+                                    Button(
+                                        onClick = { onBookTicket(focusTrip) },
+                                        modifier = Modifier.weight(1f),
+                                        shape = RoundedCornerShape(10.dp)
+                                    ) {
+                                        Icon(Icons.Default.ConfirmationNumber, contentDescription = null, modifier = Modifier.size(16.dp))
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text("Book Slot", fontSize = 12.sp)
+                                    }
                                 }
-                            }
-                            if (onShareJourney != null) {
-                                OutlinedButton(
-                                    onClick = { onShareJourney(focusTrip.id) },
-                                    modifier = Modifier.weight(1f),
-                                    shape = RoundedCornerShape(10.dp)
-                                ) {
-                                    Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text("Share Live", fontSize = 12.sp)
+                                if (onShareJourney != null) {
+                                    OutlinedButton(
+                                        onClick = { onShareJourney(focusTrip.id) },
+                                        modifier = Modifier.weight(1f),
+                                        shape = RoundedCornerShape(10.dp)
+                                    ) {
+                                        Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text("Share Live", fontSize = 12.sp)
+                                    }
                                 }
                             }
                         }
@@ -462,7 +527,6 @@ private fun fetchOsrmEta(
             }
         }
     } catch (_: Exception) {
-        // Fallback to Haversine road estimate (~1.25x straight line at 35 km/h)
     }
     val dLat = Math.toRadians(toLat - fromLat)
     val dLng = Math.toRadians(toLng - fromLng)

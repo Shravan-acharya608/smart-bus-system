@@ -89,7 +89,8 @@ data class UdupiStopCoord(
     val order: Int,
     val name: String,
     val latitude: Double,
-    val longitude: Double
+    val longitude: Double,
+    val stopId: String? = null
 )
 
 data class UdupiScheduleItem(

@@ -1,8 +1,6 @@
 package com.smartbus.app.ui.screens.passenger
 
-import androidx.compose.animation.*
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -16,30 +14,43 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.smartbus.app.data.model.BusSearchResult
 import com.smartbus.app.data.model.Stop
+import com.smartbus.app.data.model.Trip
+import com.smartbus.app.data.model.UdupiScheduleItem
+import com.smartbus.app.data.model.UdupiStopCoord
 import com.smartbus.app.ui.components.BusSeatSelector
 import com.smartbus.app.ui.theme.*
+import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RouteSearchScreen(
     stops: List<Stop>,
+    allSchedules: List<UdupiScheduleItem> = UdupiLocalTimetable.all139Schedules,
+    activeTrips: List<Trip> = emptyList(),
     busResults: List<BusSearchResult>,
     isSearching: Boolean,
     errorMsg: String?,
     selectedBoardingStopId: String?,
     selectedDestStopId: String?,
+    userLat: Double? = null,
+    userLng: Double? = null,
+    currentLocationLabel: String? = null,
+    isLocatingUser: Boolean = false,
+    onUseCurrentLocation: () -> Unit = {},
     onSelectBoardingStop: (String) -> Unit,
     onSelectDestStop: (String) -> Unit,
     onSearch: () -> Unit,
     onBookNow: (BusSearchResult, String) -> Unit,
     onHoldTicket: (BusSearchResult) -> Unit,
+    onBookScheduleBus: (UdupiScheduleItem, String) -> Unit = { _, _ -> },
+    onHoldScheduleBus: (UdupiScheduleItem) -> Unit = {},
+    onSetWakeUpAlertForStop: (UdupiStopCoord, String?) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier
 ) {
     var showBoardingDropdown by remember { mutableStateOf(false) }
@@ -47,26 +58,66 @@ fun RouteSearchScreen(
     var selectedDateTab by remember { mutableStateOf("Today") }
     var selectedFilterChip by remember { mutableStateOf("All") }
 
-    // Seat selector modal
+    // Modals
     var selectedBusForSeatSelection by remember { mutableStateOf<BusSearchResult?>(null) }
+    var selectedScheduleForMap by remember { mutableStateOf<UdupiScheduleItem?>(null) }
+    var selectedScheduleForBooking by remember { mutableStateOf<UdupiScheduleItem?>(null) }
 
-    val boardingStopName = stops.find { it.id == selectedBoardingStopId }?.name ?: ""
-    val destStopName = stops.find { it.id == selectedDestStopId }?.name ?: ""
+    val boardingStop = stops.find { it.id == selectedBoardingStopId }
+    val destStop = stops.find { it.id == selectedDestStopId }
+    val boardingStopName = currentLocationLabel ?: boardingStop?.name ?: ""
+    val destStopName = destStop?.name ?: ""
 
     var boardingQuery by remember(boardingStopName) { mutableStateOf(boardingStopName) }
     var destQuery by remember(destStopName) { mutableStateOf(destStopName) }
 
+    // Effective stop keyword for route-matching ("Near Katpadi" -> "Katpadi")
+    val effectiveFromTerm = remember(boardingQuery, boardingStop, currentLocationLabel) {
+        val raw = boardingStop?.name ?: currentLocationLabel ?: boardingQuery
+        raw.replace("📍 Near ", "")
+            .replace("Current Location (", "")
+            .substringBefore("•")
+            .replace(")", "")
+            .replace(" Bus Stand", "")
+            .trim()
+    }
+    val effectiveToTerm = remember(destQuery, destStop) {
+        (destStop?.name ?: destQuery).replace(" Bus Stand", "").trim()
+    }
+
     val filteredBoardingStops = remember(stops, boardingQuery) {
-        if (boardingQuery.isBlank()) stops
-        else stops.filter { it.name.contains(boardingQuery, ignoreCase = true) }
+        val q = boardingQuery.replace("📍 Near ", "").trim()
+        if (q.isBlank() || boardingQuery.startsWith("📍")) stops.take(25)
+        else stops.filter { it.name.contains(q, ignoreCase = true) }.take(25)
     }
 
     val filteredDestStops = remember(stops, destQuery) {
-        if (destQuery.isBlank()) stops
-        else stops.filter { it.name.contains(destQuery, ignoreCase = true) }
+        if (destQuery.isBlank()) stops.take(25)
+        else stops.filter { it.name.contains(destQuery, ignoreCase = true) }.take(25)
     }
 
-    // Filter results
+    // Match ALL buses from the 139 Udupi schedules whose route goes along effectiveFromTerm (-> effectiveToTerm)
+    val matchingWaySchedules = remember(allSchedules, effectiveFromTerm, effectiveToTerm) {
+        if (effectiveFromTerm.isBlank() && effectiveToTerm.isBlank()) {
+            emptyList()
+        } else {
+            allSchedules.filter { bus ->
+                val stopNames = bus.stops.map { it.name }
+                val fromIdx = if (effectiveFromTerm.isBlank()) 0
+                else stopNames.indexOfFirst { it.contains(effectiveFromTerm, ignoreCase = true) }
+
+                if (fromIdx == -1) return@filter false
+
+                if (effectiveToTerm.isBlank()) {
+                    fromIdx < stopNames.size - 1 || bus.from.contains(effectiveFromTerm, ignoreCase = true)
+                } else {
+                    val toIdx = stopNames.indexOfFirst { it.contains(effectiveToTerm, ignoreCase = true) }
+                    toIdx > fromIdx
+                }
+            }
+        }
+    }
+
     val filteredResults = remember(busResults, selectedFilterChip) {
         when (selectedFilterChip) {
             "Available > 10" -> busResults.filter { it.seatsAvailable >= 10 }
@@ -96,6 +147,43 @@ fun RouteSearchScreen(
         return
     }
 
+    if (selectedScheduleForBooking != null) {
+        val sch = selectedScheduleForBooking!!
+        BusSeatSelector(
+            busNumber = "#${sch.slNo} (${sch.departureTime})",
+            routeName = "${sch.from} → ${sch.to} (Via ${sch.via})",
+            baseFare = UdupiLocalTimetable.estimateFareForBus(sch),
+            availableSeatsCount = 32,
+            onConfirmBooking = { _, _, paymentMode ->
+                onBookScheduleBus(sch, paymentMode)
+                selectedScheduleForBooking = null
+            },
+            onHoldBooking = { _, _ ->
+                onHoldScheduleBus(sch)
+                selectedScheduleForBooking = null
+            },
+            onDismiss = { selectedScheduleForBooking = null }
+        )
+        return
+    }
+
+    if (selectedScheduleForMap != null) {
+        SelectedScheduleBusMapDialog(
+            bus = selectedScheduleForMap!!,
+            activeTrips = activeTrips,
+            userLat = userLat,
+            userLng = userLng,
+            onRequestMyLocation = onUseCurrentLocation,
+            onBookSlot = onBookScheduleBus,
+            onHoldSlot = onHoldScheduleBus,
+            onSetWakeUpAlarmForStop = { st, tripId ->
+                selectedScheduleForMap = null
+                onSetWakeUpAlertForStop(st, tripId)
+            },
+            onDismiss = { selectedScheduleForMap = null }
+        )
+    }
+
     LazyColumn(modifier = modifier.fillMaxSize()) {
         // Hero Search Card
         item {
@@ -108,38 +196,59 @@ fun RouteSearchScreen(
                 elevation = CardDefaults.cardElevation(defaultElevation = 5.dp)
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    // Header
                     Row(
                         modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Surface(
-                            shape = CircleShape,
-                            color = TransitSurfaceTint,
-                            modifier = Modifier.size(36.dp)
-                        ) {
-                            Icon(
-                                Icons.Default.DirectionsBus,
-                                contentDescription = null,
-                                tint = TransitPrimary,
-                                modifier = Modifier.padding(8.dp)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Surface(
+                                shape = CircleShape,
+                                color = TransitSurfaceTint,
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.DirectionsBus,
+                                    contentDescription = null,
+                                    tint = TransitPrimary,
+                                    modifier = Modifier.padding(8.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text(
+                                text = "Find Buses Your Way",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = TransitNavy
                             )
                         }
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Text(
-                            text = "Find & Book Buses",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = TransitNavy
+
+                        // Quick Current Location Chip
+                        AssistChip(
+                            onClick = onUseCurrentLocation,
+                            label = {
+                                Text(
+                                    if (isLocatingUser) "Locating..." else "Current GPS",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            },
+                            leadingIcon = {
+                                Icon(
+                                    Icons.Default.MyLocation,
+                                    contentDescription = "Use Current Location",
+                                    tint = Color(0xFF2563EB),
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
                         )
                     }
 
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
 
-                    // Origin & Destination with Swap Button
                     Box(modifier = Modifier.fillMaxWidth()) {
                         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                            // From Stop (Type or Select)
+                            // From Stop (Current Location OR Type OR Select)
                             ExposedDropdownMenuBox(
                                 expanded = showBoardingDropdown,
                                 onExpandedChange = { showBoardingDropdown = it }
@@ -153,13 +262,13 @@ fun RouteSearchScreen(
                                         if (match != null) onSelectBoardingStop(match.id)
                                     },
                                     readOnly = false,
-                                    label = { Text("From (Type or Select Stop)") },
-                                    placeholder = { Text("e.g. Udupi, Katpadi...") },
+                                    label = { Text("From (Current Location or Stop)") },
+                                    placeholder = { Text("Tap 'Current GPS' or type Udupi, Katpadi...") },
                                     leadingIcon = {
                                         Icon(
-                                            Icons.Default.TripOrigin,
+                                            if (boardingQuery.startsWith("📍")) Icons.Default.MyLocation else Icons.Default.TripOrigin,
                                             contentDescription = null,
-                                            tint = BusGreen,
+                                            tint = if (boardingQuery.startsWith("📍")) Color(0xFF2563EB) else BusGreen,
                                             modifier = Modifier.size(20.dp)
                                         )
                                     },
@@ -171,9 +280,24 @@ fun RouteSearchScreen(
                                 )
 
                                 ExposedDropdownMenu(
-                                    expanded = showBoardingDropdown && filteredBoardingStops.isNotEmpty(),
+                                    expanded = showBoardingDropdown,
                                     onDismissRequest = { showBoardingDropdown = false }
                                 ) {
+                                    // First Dropdown Item: Use My Current Location
+                                    DropdownMenuItem(
+                                        text = {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Icon(Icons.Default.MyLocation, contentDescription = null, tint = Color(0xFF2563EB), modifier = Modifier.size(18.dp))
+                                                Spacer(modifier = Modifier.width(8.dp))
+                                                Text("Use Current Location (Phone GPS)", fontWeight = FontWeight.Bold, color = Color(0xFF1D4ED8))
+                                            }
+                                        },
+                                        onClick = {
+                                            showBoardingDropdown = false
+                                            onUseCurrentLocation()
+                                        }
+                                    )
+                                    HorizontalDivider()
                                     filteredBoardingStops.forEach { stop ->
                                         DropdownMenuItem(
                                             text = { Text(stop.name) },
@@ -201,8 +325,8 @@ fun RouteSearchScreen(
                                         if (match != null) onSelectDestStop(match.id)
                                     },
                                     readOnly = false,
-                                    label = { Text("To (Type or Select Destination)") },
-                                    placeholder = { Text("e.g. Shirva, Shankarapura...") },
+                                    label = { Text("To (Optional — Destination)") },
+                                    placeholder = { Text("e.g. Karkala, Perdoor, Hebri, Shirva...") },
                                     leadingIcon = {
                                         Icon(
                                             Icons.Default.LocationOn,
@@ -236,7 +360,7 @@ fun RouteSearchScreen(
                             }
                         }
 
-                        // Swap Button in between
+                        // Swap Button
                         Surface(
                             shape = CircleShape,
                             color = TransitPrimary,
@@ -248,6 +372,9 @@ fun RouteSearchScreen(
                                 .clickable {
                                     val tempBoarding = selectedBoardingStopId
                                     val tempDest = selectedDestStopId
+                                    val tempQ = boardingQuery
+                                    boardingQuery = destQuery
+                                    destQuery = tempQ
                                     if (tempBoarding != null && tempDest != null) {
                                         onSelectBoardingStop(tempDest)
                                         onSelectDestStop(tempBoarding)
@@ -265,7 +392,6 @@ fun RouteSearchScreen(
 
                     Spacer(modifier = Modifier.height(14.dp))
 
-                    // Date Selector Chips
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -283,7 +409,7 @@ fun RouteSearchScreen(
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
 
                     // CTA Search Button
                     Button(
@@ -291,60 +417,135 @@ fun RouteSearchScreen(
                         enabled = !isSearching && selectedBoardingStopId != null && selectedDestStopId != null,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(52.dp),
+                            .height(50.dp),
                         shape = RoundedCornerShape(14.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = TransitPrimary)
                     ) {
                         if (isSearching) {
-                            CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp))
+                            CircularProgressIndicator(color = Color.White, modifier = Modifier.size(22.dp))
                         } else {
                             Icon(Icons.Default.Search, contentDescription = null)
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("SEARCH BUSES", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                            Text("SEARCH LIVE BUSES", fontWeight = FontWeight.Bold, fontSize = 14.sp)
                         }
                     }
                 }
             }
         }
 
-        // Filter Bar Chips
-        if (busResults.isNotEmpty()) {
+        // Way-Matching Scheduled Buses Header (Appears immediately once From OR To is set!)
+        if (matchingWaySchedules.isNotEmpty()) {
             item {
-                LazyRow(
+                Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                    Text(
+                        text = if (effectiveToTerm.isNotBlank())
+                            "${matchingWaySchedules.size} Buses Going From $effectiveFromTerm → $effectiveToTerm"
+                        else
+                            "${matchingWaySchedules.size} Buses Passing Through $effectiveFromTerm",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = TransitNavy
+                    )
+                    Text(
+                        "Tap any bus for Route Map, Live Navigation, Slot Booking & Wake-Up Alert",
+                        fontSize = 11.sp,
+                        color = Color.Gray
+                    )
+                }
+            }
+
+            items(matchingWaySchedules.take(40), key = { "way-${it.slNo}" }) { bus ->
+                val isOnline = activeTrips.any { it.id == bus.tripId && it.lastLocation != null }
+                val destStopCoord = bus.stops.lastOrNull()
+                Card(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp, vertical = 6.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    border = BorderStroke(1.dp, if (isOnline) Color(0xFF10B981) else Color(0xFFE2E8F0)),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
                 ) {
-                    val filterChips = listOf("All", "Available > 10", "Express", "Low Fare")
-                    items(filterChips) { chip ->
-                        FilterChip(
-                            selected = selectedFilterChip == chip,
-                            onClick = { selectedFilterChip = chip },
-                            label = { Text(chip, fontSize = 12.sp, fontWeight = FontWeight.Medium) },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = TransitNavy,
-                                selectedLabelColor = Color.White
-                            )
-                        )
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    "#${bus.slNo} • ${bus.from} → ${bus.to}",
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontSize = 15.sp,
+                                    color = TransitNavy
+                                )
+                                Text("Via: ${bus.via}", fontSize = 12.sp, color = Color(0xFF475569))
+                            }
+                            Surface(
+                                color = if (isOnline) Color(0xFF059669) else Color(0xFF0284C7),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Text(
+                                    if (isOnline) "🟢 LIVE • ${bus.departureTime}" else "Dep ${bus.departureTime}",
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 12.sp,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = { selectedScheduleForMap = bus },
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(10.dp),
+                                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 6.dp)
+                            ) {
+                                Icon(Icons.Default.Map, contentDescription = null, modifier = Modifier.size(14.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Route Map", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
+                            if (destStopCoord != null) {
+                                OutlinedButton(
+                                    onClick = { onSetWakeUpAlertForStop(destStopCoord, bus.tripId) },
+                                    modifier = Modifier.weight(1f),
+                                    shape = RoundedCornerShape(10.dp),
+                                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 6.dp)
+                                ) {
+                                    Icon(Icons.Default.AlarmAdd, contentDescription = null, modifier = Modifier.size(14.dp), tint = Color(0xFF6D28D9))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Wake Alert", fontSize = 11.sp, color = Color(0xFF6D28D9), fontWeight = FontWeight.Bold)
+                                }
+                            }
+                            Button(
+                                onClick = { selectedScheduleForBooking = bus },
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(10.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = TransitPrimary),
+                                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 6.dp)
+                            ) {
+                                Text("Book ₹${UdupiLocalTimetable.estimateFareForBus(bus).toInt()}", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
                     }
                 }
             }
         }
 
-        // Error message if any
+        // Error banner from DB search
         if (errorMsg != null) {
             item {
                 Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
                     colors = CardDefaults.cardColors(containerColor = Color(0xFFFEF2F2))
                 ) {
-                    Row(
-                        modifier = Modifier.padding(14.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
+                    Row(modifier = Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.Info, contentDescription = null, tint = BusRed)
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(errorMsg, color = BusRed, fontSize = 13.sp)
@@ -353,43 +554,35 @@ fun RouteSearchScreen(
             }
         }
 
-        // Results Section Header
-        if (busResults.isNotEmpty()) {
+        // Backend DB Search Results
+        if (filteredResults.isNotEmpty()) {
             item {
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Text(
-                        "${filteredResults.size} Buses Available",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = TransitNavy
-                    )
-                    Text(
-                        "Live Fleet Pricing",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color.Gray
-                    )
+                    Text("${filteredResults.size} Direct Corridor Trips", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = TransitNavy)
+                    Text("Live DB Inventory", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
                 }
+            }
+
+            items(filteredResults) { bus ->
+                BusResultCard(
+                    bus = bus,
+                    onSelectSeats = { selectedBusForSeatSelection = bus },
+                    onQuickHold = { onHoldTicket(bus) },
+                    onWakeAlert = {
+                        val destCoord = UdupiLocalTimetable.all139Schedules
+                            .flatMap { it.stops }
+                            .find { it.name.contains(bus.destinationStop.name, ignoreCase = true) }
+                            ?: UdupiStopCoord(2, bus.destinationStop.name, 13.2848, 74.7505)
+                        onSetWakeUpAlertForStop(destCoord, bus.tripId)
+                    }
+                )
             }
         }
 
-        // Bus Results List
-        items(filteredResults) { bus ->
-            BusResultCard(
-                bus = bus,
-                onSelectSeats = { selectedBusForSeatSelection = bus },
-                onQuickHold = { onHoldTicket(bus) }
-            )
-        }
-
-        item {
-            Spacer(modifier = Modifier.height(24.dp))
-        }
+        item { Spacer(modifier = Modifier.height(24.dp)) }
     }
 }
 
@@ -397,200 +590,91 @@ fun RouteSearchScreen(
 fun BusResultCard(
     bus: BusSearchResult,
     onSelectSeats: () -> Unit,
-    onQuickHold: () -> Unit
+    onQuickHold: () -> Unit,
+    onWakeAlert: () -> Unit = {}
 ) {
     val isFillingFast = bus.seatsAvailable in 1..5
+    val isOnline = bus.lastLocation != null
+    val depLabel = remember(bus.scheduledStart) {
+        val t = bus.scheduledStart.substringAfter("T").take(5)
+        if (t.length == 5 && t.contains(":")) t else "Scheduled"
+    }
 
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
         shape = RoundedCornerShape(18.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
         elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
-        border = BorderStroke(1.dp, Color(0xFFE2E8F0))
+        border = BorderStroke(1.dp, if (isOnline) Color(0xFF10B981) else Color(0xFFE2E8F0))
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            // Operator Name, Bus No & Rating
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column {
-                    Text(
-                        text = "SmartBus City Express",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = TransitNavy
-                    )
-                    Text(
-                        text = "${bus.busNumber} • AC Electric 2+2",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color.Gray
-                    )
-                }
-
-                Surface(
-                    shape = RoundedCornerShape(8.dp),
-                    color = BusGreen
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(Icons.Default.Star, contentDescription = null, tint = Color.White, modifier = Modifier.size(14.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("4.7", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(14.dp))
-
-            // Journey Timeline (Departure -> Duration -> Arrival)
-            Row(
-                modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        "08:30 AM",
-                        fontSize = 17.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = TransitNavy
-                    )
-                    Text(
-                        bus.boardingStop.name,
-                        fontSize = 12.sp,
-                        color = Color.Gray,
-                        maxLines = 1
-                    )
+                    Text(bus.routeName, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.ExtraBold, color = TransitNavy)
+                    Text("${bus.busNumber} • ${bus.routeCode}", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
                 }
-
-                Column(
-                    modifier = Modifier.weight(1f),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text("~45 mins", fontSize = 11.sp, color = Color.Gray, fontWeight = FontWeight.SemiBold)
-                    Divider(color = Color(0xFFCBD5E1), thickness = 1.5.dp, modifier = Modifier.padding(vertical = 4.dp))
-                    Text("Direct Route", fontSize = 10.sp, color = BusGreen, fontWeight = FontWeight.Bold)
-                }
-
-                Column(
-                    modifier = Modifier.weight(1f),
-                    horizontalAlignment = Alignment.End
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = if (isOnline) Color(0xFF059669) else Color(0xFF0284C7)
                 ) {
                     Text(
-                        "09:15 AM",
-                        fontSize = 17.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = TransitNavy
-                    )
-                    Text(
-                        bus.destinationStop.name,
-                        fontSize = 12.sp,
-                        color = Color.Gray,
-                        maxLines = 1
+                        if (isOnline) "🟢 LIVE GPS" else "Dep $depLabel",
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 11.sp,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(14.dp))
-            Divider(color = Color(0xFFF1F5F9), thickness = 1.dp)
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Amenities & Seat Status
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // Amenities Row
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("❄️ AC", fontSize = 11.sp)
-                    Text("🔌 USB", fontSize = 11.sp)
-                    Text("📍 Live GPS", fontSize = 11.sp)
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(depLabel, fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, color = TransitNavy)
+                    Text(bus.boardingStop.name, fontSize = 12.sp, color = Color.Gray, maxLines = 1)
                 }
-
-                // Fare with Discount
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        "₹${(bus.fare * 1.2).toInt()}",
-                        fontSize = 12.sp,
-                        color = Color.Gray,
-                        textDecoration = androidx.compose.ui.text.style.TextDecoration.LineThrough
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        "₹${bus.fare.toInt()}",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = TransitPrimary
-                    )
+                Column(modifier = Modifier.weight(0.8f), horizontalAlignment = Alignment.CenterHorizontally) {
+                    HorizontalDivider(color = Color(0xFFCBD5E1), thickness = 1.5.dp, modifier = Modifier.padding(vertical = 4.dp))
+                    Text("Direct", fontSize = 10.sp, color = BusGreen, fontWeight = FontWeight.Bold)
+                }
+                Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.End) {
+                    Text("₹${bus.fare.toInt()}", fontSize = 18.sp, fontWeight = FontWeight.ExtraBold, color = TransitPrimary)
+                    Text(bus.destinationStop.name, fontSize = 12.sp, color = Color.Gray, maxLines = 1)
                 }
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
-            // Seat Availability Badge
-            Surface(
-                shape = RoundedCornerShape(8.dp),
-                color = if (isFillingFast) Color(0xFFFEF3C7) else Color(0xFFECFDF5),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(
+                    onClick = onWakeAlert,
+                    modifier = Modifier.height(44.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    contentPadding = PaddingValues(horizontal = 10.dp)
                 ) {
-                    Icon(
-                        if (isFillingFast) Icons.Default.Warning else Icons.Default.EventSeat,
-                        contentDescription = null,
-                        tint = if (isFillingFast) BusAmber else BusGreen,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = if (isFillingFast) "Only ${bus.seatsAvailable} seats left - Filling fast!" else "${bus.seatsAvailable} seats available",
-                        fontSize = 12.sp,
-                        color = if (isFillingFast) Color(0xFF92400E) else Color(0xFF065F46),
-                        fontWeight = FontWeight.Bold
-                    )
+                    Icon(Icons.Default.AlarmAdd, contentDescription = "Wake Alert", modifier = Modifier.size(16.dp), tint = Color(0xFF6D28D9))
                 }
-            }
-
-            Spacer(modifier = Modifier.height(14.dp))
-
-            // Actions Row: [Hold & Board] & [Select Seats]
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
                 OutlinedButton(
                     onClick = onQuickHold,
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(46.dp),
+                    modifier = Modifier.weight(1f).height(44.dp),
                     shape = RoundedCornerShape(12.dp),
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = BusAmber),
                     border = BorderStroke(1.5.dp, BusAmber)
                 ) {
-                    Icon(Icons.Default.HourglassTop, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("Hold & Board", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Text("Hold", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 }
-
                 Button(
                     onClick = onSelectSeats,
-                    modifier = Modifier
-                        .weight(1.3f)
-                        .height(46.dp),
+                    modifier = Modifier.weight(1.3f).height(44.dp),
                     shape = RoundedCornerShape(12.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = TransitPrimary)
                 ) {
-                    Icon(Icons.Default.AirlineSeatReclineNormal, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("Select Seats", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                    Text("Book Slot • ₹${bus.fare.toInt()}", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }

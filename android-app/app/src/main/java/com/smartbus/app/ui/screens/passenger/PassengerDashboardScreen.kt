@@ -11,6 +11,8 @@ import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
+import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -97,6 +99,12 @@ fun PassengerDashboardScreen(
     var preselectedAlertTripId by remember { mutableStateOf<String?>(null) }
     var preselectedCustomStop by remember { mutableStateOf<Stop?>(null) }
 
+    // Passenger Current Location (GPS) state
+    var userLat by remember { mutableStateOf<Double?>(null) }
+    var userLng by remember { mutableStateOf<Double?>(null) }
+    var currentLocationLabel by remember { mutableStateOf<String?>(null) }
+    var isLocatingUser by remember { mutableStateOf(false) }
+
     var pendingStartAlertParams by remember { mutableStateOf<(() -> Unit)?>(null) }
     val alertPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -121,6 +129,87 @@ fun PassengerDashboardScreen(
         } else {
             onReady()
         }
+    }
+
+    fun applyUserCoordinate(lat: Double, lng: Double) {
+        userLat = lat
+        userLng = lng
+        val (nearestName, distKm) = if (allStops.isNotEmpty()) {
+            val best = allStops.minByOrNull { s ->
+                UdupiLocalTimetable.distanceKm(lat, lng, s.latitude, s.longitude)
+            }
+            if (best != null) {
+                selectedBoardingStopId = best.id
+                best.name to UdupiLocalTimetable.distanceKm(lat, lng, best.latitude, best.longitude)
+            } else {
+                UdupiLocalTimetable.findNearestPlace(lat, lng)
+            }
+        } else {
+            UdupiLocalTimetable.findNearestPlace(lat, lng)
+        }
+        currentLocationLabel = "📍 Near $nearestName (${String.format("%.1f", distKm)} km)"
+        statusMessage = "📍 Using Current Location near $nearestName — showing all buses going that way!"
+    }
+
+    fun fetchPassengerCurrentLocation(silentIfDenied: Boolean = false) {
+        val hasPerm = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
+            ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+        if (!hasPerm) {
+            if (!silentIfDenied) {
+                launchWithAlertPermissions { fetchPassengerCurrentLocation(true) }
+            }
+            return
+        }
+        isLocatingUser = true
+        val client = LocationServices.getFusedLocationProviderClient(context)
+        try {
+            client.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, null)
+                .addOnSuccessListener { loc ->
+                    isLocatingUser = false
+                    if (loc != null) {
+                        applyUserCoordinate(loc.latitude, loc.longitude)
+                    } else {
+                        client.lastLocation.addOnSuccessListener { last ->
+                            if (last != null) {
+                                applyUserCoordinate(last.latitude, last.longitude)
+                            } else if (!silentIfDenied) {
+                                statusMessage = "📍 GPS signal weak; enable device Location / GPS and try again."
+                            }
+                        }
+                    }
+                }
+                .addOnFailureListener {
+                    isLocatingUser = false
+                }
+        } catch (_: SecurityException) {
+            isLocatingUser = false
+        }
+    }
+
+    fun resolveScheduleBookingIds(sch: UdupiScheduleItem): Triple<String, String, String>? {
+        val tId = sch.tripId ?: activeTrips.firstOrNull()?.id ?: return null
+        val selectedFromName = allStops.find { it.id == selectedBoardingStopId }?.name
+            ?: currentLocationLabel?.replace("📍 Near ", "")?.substringBefore(" (")?.trim()
+        val selectedToName = allStops.find { it.id == selectedDestStopId }?.name
+
+        val boardCoord = selectedFromName?.let { fname ->
+            sch.stops.find { it.name.contains(fname.replace(" Bus Stand", ""), ignoreCase = true) }
+        } ?: sch.stops.firstOrNull()
+
+        val boardOrder = boardCoord?.order ?: 1
+        val destCoord = selectedToName?.let { tname ->
+            sch.stops.find { it.order > boardOrder && it.name.contains(tname.replace(" Bus Stand", ""), ignoreCase = true) }
+        } ?: sch.stops.lastOrNull()
+
+        val bId = boardCoord?.stopId
+            ?: allStops.find { it.name.equals(boardCoord?.name, ignoreCase = true) }?.id
+            ?: allStops.firstOrNull()?.id
+            ?: return null
+        val dId = destCoord?.stopId
+            ?: allStops.find { it.name.equals(destCoord?.name, ignoreCase = true) }?.id
+            ?: allStops.lastOrNull { it.id != bId }?.id
+            ?: return null
+        return Triple(tId, bId, dId)
     }
 
     fun executeBusSearch() {
@@ -166,6 +255,7 @@ fun PassengerDashboardScreen(
 
     LaunchedEffect(Unit) {
         refreshData()
+        fetchPassengerCurrentLocation(silentIfDenied = true)
     }
 
     // Auto-poll live GPS positions every 6 seconds while viewing Live Map
@@ -433,12 +523,22 @@ fun PassengerDashboardScreen(
                     )
                     RouteSearchScreen(
                         stops = allStops,
+                        allSchedules = udupiSchedules,
+                        activeTrips = activeTrips,
                         busResults = busSearchResults,
                         isSearching = isSearchingBuses,
                         errorMsg = searchErrorMsg,
                         selectedBoardingStopId = selectedBoardingStopId,
                         selectedDestStopId = selectedDestStopId,
-                        onSelectBoardingStop = { selectedBoardingStopId = it },
+                        userLat = userLat,
+                        userLng = userLng,
+                        currentLocationLabel = currentLocationLabel,
+                        isLocatingUser = isLocatingUser,
+                        onUseCurrentLocation = { fetchPassengerCurrentLocation() },
+                        onSelectBoardingStop = {
+                            currentLocationLabel = null
+                            selectedBoardingStopId = it
+                        },
                         onSelectDestStop = { selectedDestStopId = it },
                         onSearch = { executeBusSearch() },
                         onBookNow = { bus, paymentMode ->
@@ -479,11 +579,69 @@ fun PassengerDashboardScreen(
                                     }
                                 isLoading = false
                             }
+                        },
+                        onBookScheduleBus = { sch, paymentMode ->
+                            val resolved = resolveScheduleBookingIds(sch)
+                            if (resolved == null) {
+                                statusMessage = "⚠️ Connecting timetable trip — please refresh and try again."
+                            } else {
+                                scope.launch {
+                                    isLoading = true
+                                    app.transitRepository.payInstantTicket(resolved.first, resolved.second, resolved.third, paymentMode)
+                                        .onSuccess { payRes ->
+                                            walletBalance = payRes.walletBalance
+                                            preselectedAlertStopId = resolved.third
+                                            preselectedAlertTripId = resolved.first
+                                            statusMessage = "✅ Booked #${sch.slNo} (${sch.from} → ${sch.to}) via $paymentMode!"
+                                            refreshData()
+                                            selectedNavIndex = 2
+                                        }
+                                        .onFailure { err ->
+                                            statusMessage = "⚠️ Booking failed: ${err.message}"
+                                        }
+                                    isLoading = false
+                                }
+                            }
+                        },
+                        onHoldScheduleBus = { sch ->
+                            val resolved = resolveScheduleBookingIds(sch)
+                            if (resolved == null) {
+                                statusMessage = "⚠️ Connecting timetable trip — please refresh and try again."
+                            } else {
+                                scope.launch {
+                                    isLoading = true
+                                    app.transitRepository.holdTicket(resolved.first, resolved.second, resolved.third)
+                                        .onSuccess {
+                                            preselectedAlertStopId = resolved.third
+                                            preselectedAlertTripId = resolved.first
+                                            statusMessage = "🎟️ Slot Held for #${sch.slNo} (${sch.departureTime})! Pay ₹${it.fare.toInt()} on bus."
+                                            refreshData()
+                                            selectedNavIndex = 2
+                                        }
+                                        .onFailure { err ->
+                                            statusMessage = "⚠️ Could not hold slot: ${err.message}"
+                                        }
+                                    isLoading = false
+                                }
+                            }
+                        },
+                        onSetWakeUpAlertForStop = { st, tripId ->
+                            preselectedCustomStop = Stop(
+                                id = "custom-${st.name}",
+                                name = st.name,
+                                latitude = st.latitude,
+                                longitude = st.longitude
+                            )
+                            preselectedAlertTripId = tripId
+                            showDestAlertModal = true
                         }
                     )
                 }
                 1 -> LiveTrackingTab(
                     activeTrips = activeTrips,
+                    userLat = userLat,
+                    userLng = userLng,
+                    onRequestMyLocation = { fetchPassengerCurrentLocation() },
                     onBookTrip = { selectedTripForBooking = it },
                     onShareJourney = { tripId ->
                         scope.launch {
@@ -545,6 +703,47 @@ fun PassengerDashboardScreen(
                 )
                 4 -> UdupiTimetableView(
                     schedules = udupiSchedules,
+                    activeTrips = activeTrips,
+                    userLat = userLat,
+                    userLng = userLng,
+                    onRequestMyLocation = { fetchPassengerCurrentLocation() },
+                    onBookScheduleSlot = { sch, paymentMode ->
+                        val resolved = resolveScheduleBookingIds(sch)
+                        if (resolved != null) {
+                            scope.launch {
+                                isLoading = true
+                                app.transitRepository.payInstantTicket(resolved.first, resolved.second, resolved.third, paymentMode)
+                                    .onSuccess { payRes ->
+                                        walletBalance = payRes.walletBalance
+                                        preselectedAlertStopId = resolved.third
+                                        preselectedAlertTripId = resolved.first
+                                        statusMessage = "✅ Booked #${sch.slNo} (${sch.from} → ${sch.to}) via $paymentMode!"
+                                        refreshData()
+                                        selectedNavIndex = 2
+                                    }
+                                    .onFailure { statusMessage = "⚠️ Booking failed: ${it.message}" }
+                                isLoading = false
+                            }
+                        }
+                    },
+                    onHoldScheduleSlot = { sch ->
+                        val resolved = resolveScheduleBookingIds(sch)
+                        if (resolved != null) {
+                            scope.launch {
+                                isLoading = true
+                                app.transitRepository.holdTicket(resolved.first, resolved.second, resolved.third)
+                                    .onSuccess {
+                                        preselectedAlertStopId = resolved.third
+                                        preselectedAlertTripId = resolved.first
+                                        statusMessage = "🎟️ Slot Held for #${sch.slNo} (${sch.departureTime})!"
+                                        refreshData()
+                                        selectedNavIndex = 2
+                                    }
+                                    .onFailure { statusMessage = "⚠️ Hold failed: ${it.message}" }
+                                isLoading = false
+                            }
+                        }
+                    },
                     onSetWakeUpAlarmForStop = { stopCoord, tripId ->
                         preselectedCustomStop = Stop(
                             id = "custom-${stopCoord.name}",
@@ -1257,6 +1456,9 @@ fun ExploreRoutesTab(
 @Composable
 fun LiveTrackingTab(
     activeTrips: List<Trip>,
+    userLat: Double? = null,
+    userLng: Double? = null,
+    onRequestMyLocation: () -> Unit = {},
     onBookTrip: (Trip) -> Unit,
     onShareJourney: (String) -> Unit
 ) {
@@ -1355,6 +1557,9 @@ fun LiveTrackingTab(
                 activeTrips = activeTrips,
                 selectedTrip = selectedTrip,
                 onSelectTrip = { selectedTrip = it },
+                userLat = userLat,
+                userLng = userLng,
+                onRequestMyLocation = onRequestMyLocation,
                 onBookTicket = onBookTrip,
                 onShareJourney = onShareJourney,
                 modifier = Modifier.weight(1f)
