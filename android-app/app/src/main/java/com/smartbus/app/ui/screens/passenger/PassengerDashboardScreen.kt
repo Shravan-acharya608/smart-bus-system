@@ -1,10 +1,16 @@
 package com.smartbus.app.ui.screens.passenger
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Typeface
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -35,11 +41,13 @@ import com.google.zxing.BarcodeFormat
 import com.google.zxing.qrcode.QRCodeWriter
 import com.smartbus.app.SmartBusApplication
 import com.smartbus.app.data.model.*
+import com.smartbus.app.service.DestinationAlertService
 import com.smartbus.app.ui.components.BoardingPassCard
 import com.smartbus.app.ui.components.BusLiveMap
 import com.smartbus.app.ui.components.RollingQRCode
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -80,6 +88,38 @@ fun PassengerDashboardScreen(
     var walletBalance by remember { mutableStateOf(500.0) }
     var activeShareLink by remember { mutableStateOf<String?>(null) }
     var statusMessage by remember { mutableStateOf<String?>(null) }
+
+    // Destination Wake-Up Alarm (Night / Sleep Protection) states
+    val destAlertState by DestinationAlertService.alertState.collectAsState()
+    var showDestAlertModal by remember { mutableStateOf(false) }
+    var preselectedAlertStopId by remember { mutableStateOf<String?>(null) }
+    var preselectedAlertTripId by remember { mutableStateOf<String?>(null) }
+
+    var pendingStartAlertParams by remember { mutableStateOf<(() -> Unit)?>(null) }
+    val alertPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) {
+        pendingStartAlertParams?.invoke()
+        pendingStartAlertParams = null
+    }
+
+    fun launchWithAlertPermissions(onReady: () -> Unit) {
+        val needed = mutableListOf<String>()
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            needed.add(Manifest.permission.ACCESS_FINE_LOCATION)
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            needed.add(Manifest.permission.POST_NOTIFICATIONS)
+        }
+        if (needed.isNotEmpty()) {
+            pendingStartAlertParams = onReady
+            alertPermissionLauncher.launch(needed.toTypedArray())
+        } else {
+            onReady()
+        }
+    }
 
     fun executeBusSearch() {
         val bId = selectedBoardingStopId ?: return
@@ -148,6 +188,13 @@ fun PassengerDashboardScreen(
                     )
                 },
                 actions = {
+                    IconButton(onClick = { showDestAlertModal = true }) {
+                        Icon(
+                            if (destAlertState.isActive) Icons.Default.AlarmOn else Icons.Default.AlarmAdd,
+                            contentDescription = "Destination Wake-Up Alarm",
+                            tint = if (destAlertState.isActive) Color(0xFFFDE047) else Color.White
+                        )
+                    }
                     IconButton(onClick = { showPermanentPassModal = true }) {
                         Icon(Icons.Default.Badge, contentDescription = "Permanent Pass", tint = Color.White)
                     }
@@ -256,6 +303,61 @@ fun PassengerDashboardScreen(
                         }
                     }
 
+                    // Night Sleep Wake-Up Destination Alarm Quick Card
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (destAlertState.isActive) Color(0xFF4C1D95) else Color(0xFFF5F3FF)
+                        ),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 2.dp)
+                            .clickable { showDestAlertModal = true }
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp).fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                                Icon(
+                                    if (destAlertState.isActive) Icons.Default.AlarmOn else Icons.Default.Bedtime,
+                                    contentDescription = null,
+                                    tint = if (destAlertState.isActive) Color(0xFFFDE047) else Color(0xFF6D28D9),
+                                    modifier = Modifier.size(22.dp)
+                                )
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Column {
+                                    Text(
+                                        if (destAlertState.isActive)
+                                            "Wake-Up Alarm ON: ${destAlertState.stopName}"
+                                        else
+                                            "Night Sleep Destination Wake-Up Alarm",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 12.sp,
+                                        color = if (destAlertState.isActive) Color.White else Color(0xFF4C1D95)
+                                    )
+                                    val distLabel = destAlertState.distanceMeters?.let { m ->
+                                        if (m >= 1000) String.format("%.1f km away", m / 1000.0)
+                                        else "${m.roundToInt()} m away"
+                                    } ?: "Alerts ${if (destAlertState.radiusMeters >= 1000) "${destAlertState.radiusMeters / 1000} km" else "${destAlertState.radiusMeters} m"} before stop"
+                                    Text(
+                                        if (destAlertState.isActive) "$distLabel (${destAlertState.sourceLabel})"
+                                        else "Sleeping on the bus? Get a loud alarm before your stop",
+                                        fontSize = 10.sp,
+                                        color = if (destAlertState.isActive) Color(0xFFDDD6FE) else Color(0xFF6D28D9)
+                                    )
+                                }
+                            }
+                            Text(
+                                if (destAlertState.isActive) "Manage" else "Set",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = if (destAlertState.isActive) Color(0xFFFDE047) else Color(0xFF6D28D9)
+                            )
+                        }
+                    }
+
                     // Quick Popular Karnataka Route Chips (always visible for 1-tap search)
                     if (allStops.isNotEmpty()) {
                         LazyRow(
@@ -311,7 +413,9 @@ fun PassengerDashboardScreen(
                                 app.transitRepository.payInstantTicket(bus.tripId, bId, dId, paymentMode)
                                     .onSuccess { payRes ->
                                         walletBalance = payRes.walletBalance
-                                        statusMessage = "✅ Paid ₹${payRes.ticket.fare.toInt()} via $paymentMode! Ticket is ready."
+                                        preselectedAlertStopId = dId
+                                        preselectedAlertTripId = bus.tripId
+                                        statusMessage = "✅ Paid ₹${payRes.ticket.fare.toInt()} via $paymentMode! Tap 'Night Wake-Up Alarm' on your ticket if traveling at night."
                                         refreshData()
                                         selectedNavIndex = 2
                                     }
@@ -328,6 +432,8 @@ fun PassengerDashboardScreen(
                                 isLoading = true
                                 app.transitRepository.holdTicket(bus.tripId, bId, dId)
                                     .onSuccess {
+                                        preselectedAlertStopId = dId
+                                        preselectedAlertTripId = bus.tripId
                                         statusMessage = "🎟️ Seat Held! Pay ₹${it.fare.toInt()} to the conductor on boarding."
                                         refreshData()
                                         selectedNavIndex = 2
@@ -375,6 +481,11 @@ fun PassengerDashboardScreen(
                                 context.startActivity(Intent.createChooser(sendIntent, "Share with Family"))
                             }
                         }
+                    },
+                    onSetWakeUpAlert = { ticket ->
+                        preselectedAlertStopId = ticket.destinationStopId
+                        preselectedAlertTripId = ticket.tripId
+                        showDestAlertModal = true
                     }
                 )
                 3 -> ProfileTab(
@@ -745,6 +856,222 @@ fun PassengerDashboardScreen(
             }
         }
     }
+
+    // Night Sleep Destination Wake-Up Alarm Setup Dialog
+    if (showDestAlertModal) {
+        val fallbackStops = remember {
+            listOf(
+                Stop("stop-1", "Udupi Service Bus Stand", 13.3409, 74.7421),
+                Stop("stop-2", "Kinnimulki", 13.3235, 74.7388),
+                Stop("stop-3", "Katpadi Junction", 13.2848, 74.7505),
+                Stop("stop-4", "Shankarapura", 13.2603, 74.7712),
+                Stop("stop-5", "Shirva Bus Stand", 13.2188, 74.8223)
+            )
+        }
+        val availableStops = if (allStops.isNotEmpty()) allStops else fallbackStops
+        var pickedStop by remember(preselectedAlertStopId, availableStops) {
+            mutableStateOf(
+                availableStops.find { it.id == preselectedAlertStopId }
+                    ?: availableStops.find { it.name.contains("Katpadi", ignoreCase = true) }
+                    ?: availableStops.last()
+            )
+        }
+        var selectedRadius by remember { mutableStateOf(1000) }
+        var isLoudNightMode by remember { mutableStateOf(true) }
+
+        AlertDialog(
+            onDismissRequest = { showDestAlertModal = false },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Bedtime, contentDescription = null, tint = Color(0xFF6D28D9))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Destination Wake-Up Alarm", fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                }
+            },
+            text = {
+                Column(
+                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text(
+                        "Designed for night & sleepy travel: monitors both your Phone GPS and live Bus GPS in background, then triggers a loud alarm & vibration before you miss your stop.",
+                        fontSize = 12.sp,
+                        color = Color(0xFF475569)
+                    )
+
+                    if (destAlertState.isActive) {
+                        Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFEDE9FE))) {
+                            Column(modifier = Modifier.padding(10.dp).fillMaxWidth()) {
+                                Text("Currently Monitoring: ${destAlertState.stopName}", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = Color(0xFF4C1D95))
+                                val distTxt = destAlertState.distanceMeters?.let { m ->
+                                    if (m >= 1000) String.format("%.1f km away", m / 1000.0) else "${m.roundToInt()} m away"
+                                } ?: "Acquiring GPS..."
+                                Text("$distTxt • via ${destAlertState.sourceLabel}", fontSize = 11.sp, color = Color(0xFF6D28D9))
+                            }
+                        }
+                    }
+
+                    Text("Select Alighting Stop:", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    availableStops.forEach { stop ->
+                        Surface(
+                            onClick = { pickedStop = stop },
+                            shape = RoundedCornerShape(10.dp),
+                            color = if (pickedStop.id == stop.id) Color(0xFFEDE9FE) else Color(0xFFF8FAFC),
+                            border = androidx.compose.foundation.BorderStroke(
+                                1.dp,
+                                if (pickedStop.id == stop.id) Color(0xFF7C3AED) else Color(0xFFE2E8F0)
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(stop.name, fontSize = 13.sp, fontWeight = if (pickedStop.id == stop.id) FontWeight.Bold else FontWeight.Normal)
+                                if (pickedStop.id == stop.id) {
+                                    Icon(Icons.Default.CheckCircle, contentDescription = null, tint = Color(0xFF6D28D9), modifier = Modifier.size(18.dp))
+                                }
+                            }
+                        }
+                    }
+
+                    Text("Wake Me Up Before Reaching Stop:", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        listOf(500 to "500 m", 1000 to "1 km", 2000 to "2 km").forEach { (meters, label) ->
+                            FilterChip(
+                                selected = selectedRadius == meters,
+                                onClick = { selectedRadius = meters },
+                                label = { Text(label, fontSize = 11.sp) }
+                            )
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Loud Night Alarm + Vibrate", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                            Text("Rings continuous alarm sound until you dismiss", fontSize = 10.sp, color = Color.Gray)
+                        }
+                        Switch(checked = isLoudNightMode, onCheckedChange = { isLoudNightMode = it })
+                    }
+
+                    OutlinedButton(
+                        onClick = {
+                            launchWithAlertPermissions {
+                                DestinationAlertService.triggerTestAlarm(context, pickedStop.name)
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Icon(Icons.Default.NotificationsActive, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Test Night Alarm Sound & Vibrate", fontSize = 12.sp)
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val tripId = preselectedAlertTripId ?: activeTrips.firstOrNull()?.id
+                        launchWithAlertPermissions {
+                            DestinationAlertService.startAlert(
+                                context = context,
+                                stopName = pickedStop.name,
+                                lat = pickedStop.latitude,
+                                lng = pickedStop.longitude,
+                                radiusMeters = selectedRadius,
+                                isNightLoudMode = isLoudNightMode,
+                                tripId = tripId
+                            )
+                            statusMessage = "🛌 Wake-Up Alarm armed for ${pickedStop.name} (${if (selectedRadius >= 1000) "${selectedRadius / 1000} km" else "$selectedRadius m"} before stop)!"
+                            showDestAlertModal = false
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6D28D9))
+                ) {
+                    Text("Start Wake-Up Alarm")
+                }
+            },
+            dismissButton = {
+                Row {
+                    if (destAlertState.isActive) {
+                        TextButton(onClick = {
+                            DestinationAlertService.stopAlert(context)
+                            statusMessage = "Alarm turned off."
+                            showDestAlertModal = false
+                        }) {
+                            Text("Turn Off", color = MaterialTheme.colorScheme.error)
+                        }
+                    }
+                    TextButton(onClick = { showDestAlertModal = false }) { Text("Cancel") }
+                }
+            }
+        )
+    }
+
+    // Active Ringing Wake-Up Alarm Modal (Full Alert)
+    if (destAlertState.isRinging) {
+        Dialog(onDismissRequest = {}) {
+            Card(
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF7F1D1D)),
+                modifier = Modifier.fillMaxWidth().padding(8.dp),
+                elevation = CardDefaults.cardElevation(defaultElevation = 12.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Icon(
+                        Icons.Default.Alarm,
+                        contentDescription = null,
+                        tint = Color(0xFFFDE047),
+                        modifier = Modifier.size(64.dp)
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        "WAKE UP! YOUR STOP IS NEXT",
+                        color = Color(0xFFFDE047),
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 14.sp,
+                        letterSpacing = 1.sp
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        destAlertState.stopName,
+                        color = Color.White,
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 22.sp
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    val distStr = destAlertState.distanceMeters?.let { m ->
+                        if (m >= 1000) String.format("%.1f km away", m / 1000.0) else "${m.roundToInt()} meters away"
+                    } ?: "Approaching stop"
+                    Text(
+                        "$distStr • Prepare to alight!",
+                        color = Color(0xFFFECACA),
+                        fontSize = 14.sp
+                    )
+                    Spacer(modifier = Modifier.height(22.dp))
+                    Button(
+                        onClick = { DestinationAlertService.dismissAlarm(context) },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981)),
+                        shape = RoundedCornerShape(14.dp),
+                        modifier = Modifier.fillMaxWidth().height(54.dp)
+                    ) {
+                        Icon(Icons.Default.Check, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("I'M AWAKE • DISMISS ALARM", fontWeight = FontWeight.ExtraBold, fontSize = 14.sp)
+                    }
+                }
+            }
+        }
+    }
 }
 
 @Composable
@@ -1067,7 +1394,8 @@ fun MyTicketsTab(
     tickets: List<Ticket>,
     onShowQr: (Ticket) -> Unit,
     onTrackLive: (String) -> Unit,
-    onShareJourney: (String) -> Unit
+    onShareJourney: (String) -> Unit,
+    onSetWakeUpAlert: (Ticket) -> Unit = {}
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -1095,7 +1423,8 @@ fun MyTicketsTab(
                 ticket = ticket,
                 onShowRollingQr = { onShowQr(ticket) },
                 onTrackLive = { onTrackLive(ticket.tripId) },
-                onShareWithFamily = { onShareJourney(ticket.tripId) }
+                onShareWithFamily = { onShareJourney(ticket.tripId) },
+                onSetWakeUpAlert = { onSetWakeUpAlert(ticket) }
             )
         }
     }

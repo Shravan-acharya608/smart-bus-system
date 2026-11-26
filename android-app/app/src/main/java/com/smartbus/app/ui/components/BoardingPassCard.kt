@@ -28,6 +28,7 @@ fun BoardingPassCard(
     onShowRollingQr: () -> Unit,
     onTrackLive: () -> Unit,
     onShareWithFamily: () -> Unit,
+    onSetWakeUpAlert: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val isHeld = ticket.status.uppercase() == "HELD"
@@ -252,6 +253,22 @@ fun BoardingPassCard(
                             tint = TransitNavy,
                             modifier = Modifier.size(20.dp)
                         )
+                    }
+                }
+
+                // Night Sleep Wake-Up Destination Alarm quick button
+                if (onSetWakeUpAlert != null && !isUsed && !isRefunded) {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    OutlinedButton(
+                        onClick = onSetWakeUpAlert,
+                        modifier = Modifier.fillMaxWidth().height(42.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF7C3AED)),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF6D28D9))
+                    ) {
+                        Icon(Icons.Default.Alarm, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Night Wake-Up Destination Alarm", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }

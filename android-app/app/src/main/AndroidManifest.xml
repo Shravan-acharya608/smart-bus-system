@@ -19,9 +19,10 @@
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
 
-    <!-- Notifications & vibration -->
+    <!-- Notifications, vibration & night wake-up alarm -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <application
         android:name=".SmartBusApplication"
@@ -55,6 +56,13 @@
         <!-- Driver Foreground Location Service -->
         <service
             android:name=".service.LocationTrackingService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="location" />
+
+        <!-- Passenger Night Destination Wake-Up Alarm Service -->
+        <service
+            android:name=".service.DestinationAlertService"
             android:enabled="true"
             android:exported="false"
             android:foregroundServiceType="location" />
