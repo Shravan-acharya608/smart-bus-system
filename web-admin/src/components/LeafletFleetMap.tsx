@@ -160,6 +160,10 @@ export const LeafletFleetMap: React.FC<LeafletFleetMapProps> = ({
 
         stopMarkersRef.current.push(stopMarker);
       });
+
+      if (routeStops && routeStops.length > 0) {
+        map.fitBounds(L.latLngBounds(latLngs), { padding: [50, 50], maxZoom: 14 });
+      }
     }
   }, [routeStops]);
 

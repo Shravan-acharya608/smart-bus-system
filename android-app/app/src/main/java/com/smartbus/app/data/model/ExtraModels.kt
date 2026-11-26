@@ -84,3 +84,23 @@ data class StaffDetailsResponse(
     val profile: StaffProfileInfo,
     val salary: StaffSalaryInfo
 )
+
+data class UdupiStopCoord(
+    val order: Int,
+    val name: String,
+    val latitude: Double,
+    val longitude: Double
+)
+
+data class UdupiScheduleItem(
+    val slNo: Int,
+    val busNumber: String,
+    val tripId: String? = null,
+    val tripStatus: String = "SCHEDULED",
+    val from: String,
+    val to: String,
+    val serviceClass: String,
+    val via: String,
+    val departureTime: String,
+    val stops: List<UdupiStopCoord> = emptyList()
+)

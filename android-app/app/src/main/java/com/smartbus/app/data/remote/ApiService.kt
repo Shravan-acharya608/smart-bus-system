@@ -142,4 +142,10 @@ interface ApiService {
 
     @POST("tickets/pay-instant")
     suspend fun payInstantTicket(@Body request: InstantPayRequest): Response<ApiResponse<InstantPayResponse>>
+
+    @GET("routes/udupi-schedules")
+    suspend fun getUdupiSchedules(
+        @Query("q") q: String? = null,
+        @Query("to") to: String? = null
+    ): Response<ApiResponse<List<UdupiScheduleItem>>>
 }

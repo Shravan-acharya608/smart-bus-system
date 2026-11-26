@@ -31,7 +31,7 @@ const RoutesPage: React.FC = () => {
   const { data: routes, isLoading, isError } = useQuery<Route[]>({
     queryKey: ['routes'],
     queryFn: async () => {
-      const res = await apiClient.get<ApiResponse<Route[]>>(API_ENDPOINTS.ROUTES);
+      const res = await apiClient.get<ApiResponse<Route[]>>(`${API_ENDPOINTS.ROUTES}?limit=100`);
       return res.data.data || [];
     },
   });

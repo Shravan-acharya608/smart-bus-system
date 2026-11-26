@@ -3,6 +3,7 @@ import { prisma } from '../lib/prisma';
 import { AuthenticatedRequest } from '../middleware/auth';
 import { z } from 'zod';
 import { UserRole } from '@prisma/client';
+import { UDUPI_SCHEDULES, buildStopsForSchedule } from '../data/udupiTimetable';
 
 const stopInputSchema = z.object({
   name: z.string().min(2).max(100),
@@ -37,7 +38,7 @@ export async function getRoutes(req: AuthenticatedRequest, res: Response): Promi
     const { origin, destination, search, page = '1', limit = '20' } = req.query as Record<string, string>;
 
     const pageNum = Math.max(1, parseInt(page, 10) || 1);
-    const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || 20));
+    const limitNum = Math.min(200, Math.max(1, parseInt(limit, 10) || 100));
     const skip = (pageNum - 1) * limitNum;
 
     const where: any = { isActive: true };
@@ -355,6 +356,71 @@ export async function searchBuses(req: AuthenticatedRequest, res: Response): Pro
     res.json({ success: true, data: results, count: results.length });
   } catch (error: any) {
     res.status(500).json({ success: false, error: { code: 'SERVER_ERROR', message: error.message || 'Search failed' } });
+  }
+}
+
+export async function getUdupiSchedules(req: AuthenticatedRequest, res: Response): Promise<void> {
+  try {
+    const { q, to } = req.query as { q?: string; to?: string };
+
+    // Match schedules with any DB trips/routes if seeded
+    const dbTrips = await prisma.trip.findMany({
+      where: { status: { in: ['ACTIVE', 'SCHEDULED'] } },
+      select: {
+        id: true,
+        notes: true,
+        status: true,
+        bus: { select: { busNumber: true } },
+      },
+      take: 200,
+    });
+
+    const tripBySlNo = new Map<number, { tripId: string; status: string; busNumber: string }>();
+    for (const t of dbTrips) {
+      const m = t.notes?.match(/Sl\.No\s*#?(\d+)/i);
+      if (m) {
+        tripBySlNo.set(parseInt(m[1], 10), {
+          tripId: t.id,
+          status: t.status,
+          busNumber: t.bus.busNumber,
+        });
+      }
+    }
+
+    let items = UDUPI_SCHEDULES.map((row) => {
+      const stops = buildStopsForSchedule(row);
+      const linked = tripBySlNo.get(row.slNo);
+      return {
+        slNo: row.slNo,
+        busNumber: linked?.busNumber || `KA-20-UDP-${String(row.slNo).padStart(3, '0')}`,
+        tripId: linked?.tripId || null,
+        tripStatus: linked?.status || 'SCHEDULED',
+        from: row.from,
+        to: row.to,
+        serviceClass: row.serviceClass,
+        via: row.via,
+        departureTime: row.departureTime,
+        stops,
+      };
+    });
+
+    if (to && to !== 'ALL') {
+      items = items.filter((item) => item.to.toLowerCase().includes(to.toLowerCase()));
+    }
+    if (q) {
+      const term = q.toLowerCase();
+      items = items.filter(
+        (item) =>
+          item.to.toLowerCase().includes(term) ||
+          item.via.toLowerCase().includes(term) ||
+          item.departureTime.includes(term) ||
+          String(item.slNo) === term
+      );
+    }
+
+    res.json({ success: true, data: items, count: items.length });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: { code: 'SERVER_ERROR', message: error.message || 'Failed to load Udupi schedules' } });
   }
 }
 

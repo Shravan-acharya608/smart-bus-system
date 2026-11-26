@@ -26,6 +26,8 @@ interface IncidentItem {
 
 const LiveMap: React.FC = () => {
   const [selectedBus, setSelectedBus] = useState<FleetBus | null>(null);
+  const [selectedSchedule, setSelectedSchedule] = useState<any | null>(null);
+  const [scheduleSearch, setScheduleSearch] = useState('');
   const [liveEta, setLiveEta] = useState<{ minutes: number; km: string; stopName: string } | null>(null);
 
   // 1. Fetch live fleet status from admin dashboard
@@ -38,17 +40,35 @@ const LiveMap: React.FC = () => {
     refetchInterval: 5000, // Refresh every 5 seconds for live driver GPS updates
   });
 
-  // 2. Fetch routes & stops for the corridor (Udupi - Katpadi - Shirva)
+  // 2. Fetch routes & all 139 Udupi Bus Stand schedules
   const { data: routesData } = useQuery<any[]>({
     queryKey: ['active-routes-stops'],
     queryFn: async () => {
-      const res = await apiClient.get<ApiResponse<any[]>>('/routes');
+      const res = await apiClient.get<ApiResponse<any[]>>('/routes?limit=100');
       return res.data.data || [];
     },
   });
 
-  // Extract stops for current selected route or fallback to Udupi - Katpadi - Shirva
+  const { data: udupiSchedules } = useQuery<any[]>({
+    queryKey: ['udupi-schedules'],
+    queryFn: async () => {
+      const res = await apiClient.get<ApiResponse<any[]>>('/routes/udupi-schedules');
+      return res.data.data || [];
+    },
+  });
+
+  // Extract stops for selected 139-schedule bus OR active fleet route
   const activeRouteStops: RouteStopInfo[] = React.useMemo(() => {
+    if (selectedSchedule?.stops && selectedSchedule.stops.length > 0) {
+      return selectedSchedule.stops.map((st: any) => ({
+        id: `sched-${selectedSchedule.slNo}-${st.order}`,
+        name: st.name,
+        latitude: st.latitude,
+        longitude: st.longitude,
+        order: st.order,
+        arrival: st.order === 1 ? selectedSchedule.departureTime : null,
+      }));
+    }
     if (!routesData || routesData.length === 0) return [];
     const route = routesData.find((r) => r.name?.includes('Udupi') || r.code === 'KA-20-UKS') || routesData[0];
     if (route?.stops) {
@@ -64,7 +84,20 @@ const LiveMap: React.FC = () => {
       }));
     }
     return [];
-  }, [routesData]);
+  }, [routesData, selectedSchedule]);
+
+  const filteredSchedules = React.useMemo(() => {
+    const list = udupiSchedules || [];
+    if (!scheduleSearch.trim()) return list;
+    const term = scheduleSearch.toLowerCase();
+    return list.filter(
+      (s) =>
+        s.to.toLowerCase().includes(term) ||
+        s.via.toLowerCase().includes(term) ||
+        s.departureTime.includes(term) ||
+        String(s.slNo) === term
+    );
+  }, [udupiSchedules, scheduleSearch]);
 
   // 3. Fetch active incidents
   const { data: incidents, refetch: refetchIncidents } = useQuery<IncidentItem[]>({
@@ -256,6 +289,56 @@ const LiveMap: React.FC = () => {
               );
             })
           )}
+
+          {/* Udupi Bus Stand 139-Bus Timetable & Route Selector */}
+          <div className="pt-4 mt-4 border-t border-gray-200 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-bold text-gray-700 uppercase tracking-wider">
+                Udupi 139 Bus Schedules
+              </h3>
+              {selectedSchedule && (
+                <button
+                  onClick={() => setSelectedSchedule(null)}
+                  className="text-xs text-sky-600 font-semibold hover:underline"
+                >
+                  Clear Selection
+                </button>
+              )}
+            </div>
+            <input
+              type="text"
+              value={scheduleSearch}
+              onChange={(e) => setScheduleSearch(e.target.value)}
+              placeholder="Search To, Via, Time (e.g. Karkala, 07.00)..."
+              className="w-full px-3 py-2 text-xs border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500"
+            />
+            <div className="max-h-72 overflow-y-auto space-y-1.5 pr-1">
+              {filteredSchedules.map((sch) => {
+                const isSel = selectedSchedule?.slNo === sch.slNo;
+                return (
+                  <div
+                    key={sch.slNo}
+                    onClick={() => setSelectedSchedule(sch)}
+                    className={`p-2.5 rounded-lg border text-xs cursor-pointer transition ${
+                      isSel
+                        ? 'bg-sky-50 border-sky-500 shadow-sm'
+                        : 'bg-white border-gray-200 hover:border-gray-300'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between font-bold text-gray-900">
+                      <span>#{sch.slNo} {sch.from} → {sch.to}</span>
+                      <span className="text-sky-700 bg-sky-100 px-1.5 py-0.5 rounded font-mono">
+                        {sch.departureTime}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-gray-500 mt-0.5 truncate">
+                      Via: {sch.via} • {sch.serviceClass}
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         </div>
 
         {/* Live Map Display Container */}
@@ -265,10 +348,16 @@ const LiveMap: React.FC = () => {
             <div className="flex flex-wrap items-center justify-between gap-2 pb-4 mb-4 border-b border-gray-100">
               <div>
                 <h3 className="font-bold text-gray-900 text-lg">
-                  {selectedBus ? `Bus ${selectedBus.busNumber} — ${selectedBus.routeName}` : 'Udupi – Katpadi – Shirva Corridor'}
+                  {selectedSchedule
+                    ? `#${selectedSchedule.slNo} Udupi → ${selectedSchedule.to} (Dep ${selectedSchedule.departureTime})`
+                    : selectedBus
+                    ? `Bus ${selectedBus.busNumber} — ${selectedBus.routeName}`
+                    : 'Udupi – Katpadi – Shirva Corridor'}
                 </h3>
                 <p className="text-xs text-gray-500">
-                  {selectedBus
+                  {selectedSchedule
+                    ? `Service: ${selectedSchedule.serviceClass} | Via: ${selectedSchedule.via}`
+                    : selectedBus
                     ? `Driver: ${selectedBus.driverName} | Conductor: ${selectedBus.conductorName}`
                     : 'Displaying real-time vehicle positions & scheduled stops'}
                 </p>

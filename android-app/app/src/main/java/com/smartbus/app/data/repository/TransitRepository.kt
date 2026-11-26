@@ -268,4 +268,17 @@ class TransitRepository(private val apiService: ApiService) {
             Result.failure(e)
         }
     }
+
+    suspend fun getUdupiSchedules(query: String? = null, to: String? = null): Result<List<UdupiScheduleItem>> {
+        return try {
+            val res = apiService.getUdupiSchedules(query, to)
+            if (res.isSuccessful && res.body()?.success == true) {
+                Result.success(res.body()!!.data ?: emptyList())
+            } else {
+                Result.failure(Exception(res.body()?.error?.message ?: "Failed to load schedules"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
 }

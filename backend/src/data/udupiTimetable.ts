@@ -1,0 +1,248 @@
+export interface UdupiScheduleRow {
+  slNo: number;
+  from: string;
+  to: string;
+  serviceClass: string;
+  via: string;
+  departureTime: string;
+}
+
+export interface PlaceCoord {
+  name: string;
+  latitude: number;
+  longitude: number;
+}
+
+export const UDUPI_PLACE_COORDS: Record<string, PlaceCoord> = {
+  'Udupi': { name: 'Udupi Bus Stand', latitude: 13.3409, longitude: 74.7421 },
+  'Brahamagiri': { name: 'Brahamagiri', latitude: 13.3375, longitude: 74.7460 },
+  'Santhekatte': { name: 'Santhekatte', latitude: 13.3688, longitude: 74.7294 },
+  'Kolalgiri': { name: 'Kolalgiri', latitude: 13.4142, longitude: 74.7695 },
+  'Perdoor': { name: 'Perdoor', latitude: 13.3667, longitude: 74.8805 },
+  'Katapadi': { name: 'Katapadi', latitude: 13.2848, longitude: 74.7505 },
+  'Shubhas Nagara': { name: 'Shubhas Nagara', latitude: 13.2712, longitude: 74.7689 },
+  'Shankarpura': { name: 'Shankarpura', latitude: 13.2603, longitude: 74.7712 },
+  'Mancha Kallu': { name: 'Mancha Kallu', latitude: 13.2415, longitude: 74.8012 },
+  'Hiriyadka': { name: 'Hiriyadka', latitude: 13.3474, longitude: 74.8535 },
+  'Bailur': { name: 'Bailur', latitude: 13.2974, longitude: 74.9382 },
+  'Joduraste': { name: 'Joduraste', latitude: 13.2305, longitude: 74.9808 },
+  'Karkala': { name: 'Karkala', latitude: 13.2156, longitude: 74.9990 },
+  'Daina': { name: 'Daina Circle', latitude: 13.3389, longitude: 74.7475 },
+  'Alevoor': { name: 'Alevoor', latitude: 13.3135, longitude: 74.7772 },
+  'Kukkikatte': { name: 'Kukkikatte', latitude: 13.3292, longitude: 74.7634 },
+  'Marne': { name: 'Marne', latitude: 13.2830, longitude: 74.8325 },
+  'Manipal': { name: 'Manipal', latitude: 13.3525, longitude: 74.7868 },
+  'Manipala': { name: 'Manipal', latitude: 13.3525, longitude: 74.7868 },
+  'Hebri': { name: 'Hebri', latitude: 13.4577, longitude: 74.9942 },
+  'Nellikatte': { name: 'Nellikatte', latitude: 13.4385, longitude: 74.9720 },
+  'Agumbe': { name: 'Agumbe', latitude: 13.5087, longitude: 75.0956 },
+  'Shivamogga': { name: 'Shivamogga', latitude: 13.9299, longitude: 75.5681 },
+  'Malpe': { name: 'Malpe', latitude: 13.3526, longitude: 74.7037 },
+  'Kalmady': { name: 'Kalmady', latitude: 13.3490, longitude: 74.7145 },
+  'Hampankatte': { name: 'Hampankatte (Malpe)', latitude: 13.3540, longitude: 74.7095 },
+  'Brahmavara': { name: 'Brahmavara', latitude: 13.4357, longitude: 74.7458 },
+  'Salikere': { name: 'Salikere', latitude: 13.4480, longitude: 74.7380 },
+  'Honnalla': { name: 'Honnalla', latitude: 13.4620, longitude: 74.7295 },
+  'Indrali': { name: 'Indrali', latitude: 13.3458, longitude: 74.7695 },
+  'Nejar': { name: 'Nejar', latitude: 13.3792, longitude: 74.7258 },
+  'Kemmanu': { name: 'Kemmanu', latitude: 13.4018, longitude: 74.7128 },
+  'Hoode': { name: 'Hoode', latitude: 13.4090, longitude: 74.6960 },
+  'Moodubelle': { name: 'Moodubelle', latitude: 13.2798, longitude: 74.8058 },
+  'Karavali Bipass': { name: 'Karavali Bypass', latitude: 13.3408, longitude: 74.7330 },
+  'Padukere': { name: 'Padukere', latitude: 13.3438, longitude: 74.6992 },
+  'Parkala': { name: 'Parkala', latitude: 13.3578, longitude: 74.8095 },
+  'Herga': { name: 'Herga', latitude: 13.3620, longitude: 74.8190 },
+  'Kanajar': { name: 'Kanajar', latitude: 13.2495, longitude: 74.9182 },
+  'Kanjar': { name: 'Kanajar', latitude: 13.2495, longitude: 74.9182 },
+  'Garidimajal': { name: 'Garidimajal', latitude: 13.3895, longitude: 74.7460 },
+  'Malpe Beach': { name: 'Malpe Beach', latitude: 13.3536, longitude: 74.7005 },
+  'Thotam': { name: 'Thotam', latitude: 13.3775, longitude: 74.6975 },
+  'Padubidri': { name: 'Padubidri', latitude: 13.1398, longitude: 74.7721 },
+  'DC Office': { name: 'DC Office (NH-66 South)', latitude: 12.8639, longitude: 74.8364 },
+  'Adiudupi': { name: 'Adiudupi', latitude: 13.3442, longitude: 74.7250 },
+  'Kodavoor': { name: 'Kodavoor', latitude: 13.3590, longitude: 74.7168 },
+  'Thenkanidiyoor': { name: 'Thenkanidiyoor', latitude: 13.3735, longitude: 74.7130 },
+  'Barkur': { name: 'Barkur', latitude: 13.4675, longitude: 74.7568 },
+  'Mandarthi': { name: 'Mandarthi', latitude: 13.4945, longitude: 74.8285 },
+  'Kokkarene': { name: 'Kokkarene', latitude: 13.5050, longitude: 74.8550 },
+  'Kota': { name: 'Kota', latitude: 13.5162, longitude: 74.7132 },
+  'Kundapura': { name: 'Kundapura', latitude: 13.6213, longitude: 74.6897 },
+  'Shringeri': { name: 'Shringeri', latitude: 13.4198, longitude: 75.2567 },
+  'Haladi': { name: 'Haladi', latitude: 13.5752, longitude: 74.8832 },
+  'Siddapura': { name: 'Siddapura', latitude: 13.6625, longitude: 74.8635 },
+  'Kollur': { name: 'Kollur', latitude: 13.8635, longitude: 74.8126 },
+  'Biruru': { name: 'Biruru', latitude: 13.5975, longitude: 75.9735 },
+  'Baaliga': { name: 'Baaliga', latitude: 13.4280, longitude: 74.7650 },
+  'Upooru': { name: 'Upooru', latitude: 13.4025, longitude: 74.7495 },
+  'Amasebailu': { name: 'Amasebailu', latitude: 13.5515, longitude: 74.9895 },
+};
+
+export const UDUPI_SCHEDULES: UdupiScheduleRow[] = [
+  { slNo: 1, from: 'Udupi', to: 'Perdoor', serviceClass: 'Ordinary', via: 'Brahamagiri, Santhekatte, Kolalgiri', departureTime: '06.30' },
+  { slNo: 2, from: 'Udupi', to: 'Mancha Kallu', serviceClass: 'Ordinary', via: 'Katapadi, Shubhas Nagara, Shankarpura', departureTime: '06.50' },
+  { slNo: 3, from: 'Udupi', to: 'Karkala', serviceClass: 'Ordinary', via: 'Hiriyadka, Bailur, Joduraste', departureTime: '06.55' },
+  { slNo: 4, from: 'Udupi', to: 'Marne', serviceClass: 'Ordinary', via: 'Daina, Alevoor, Kukkikatte', departureTime: '07.00' },
+  { slNo: 5, from: 'Udupi', to: 'Hebri,Nellikatte', serviceClass: 'Ordinary', via: 'Manipal, Hiriyadka, Perdoor', departureTime: '07.00' },
+  { slNo: 6, from: 'Udupi', to: 'Shivamogga', serviceClass: 'Ordinary', via: 'Perdoor, Hebri, Agumbe', departureTime: '07.00' },
+  { slNo: 7, from: 'Udupi', to: 'Hampankatte', serviceClass: 'Ordinary', via: 'Malpe, Kalmady', departureTime: '07.05' },
+  { slNo: 8, from: 'Udupi', to: 'Honnalla', serviceClass: 'Ordinary', via: 'Santhekatte, Brahmavara, Salikere', departureTime: '07.05' },
+  { slNo: 9, from: 'Udupi', to: 'Manipal', serviceClass: 'Ordinary', via: 'Indrali', departureTime: '07.10' },
+  { slNo: 10, from: 'Udupi', to: 'Kemmanu,Hoode', serviceClass: 'Ordinary', via: 'Santhekatte, Nejar, Hoode', departureTime: '07.10' },
+  { slNo: 11, from: 'Udupi', to: 'Moodubelle', serviceClass: 'Ordinary', via: 'Daina, Moodubelle, Karkala', departureTime: '07.15' },
+  { slNo: 12, from: 'Udupi', to: 'Shivamogga', serviceClass: 'Ordinary', via: 'Perdoor, Hebri, Agumbe', departureTime: '07.15' },
+  { slNo: 13, from: 'Udupi', to: 'Padukere', serviceClass: 'Ordinary', via: 'Karavali Bipass, Kalmady, Malpe', departureTime: '07.17' },
+  { slNo: 14, from: 'Udupi', to: 'Karkala', serviceClass: 'Ordinary', via: 'Hiriyadka, Bailur, Joduraste', departureTime: '07.22' },
+  { slNo: 15, from: 'Udupi', to: 'Herga', serviceClass: 'Ordinary', via: 'Manipala, Indrali, Parkala', departureTime: '07.26' },
+  { slNo: 16, from: 'Udupi', to: 'Karkala', serviceClass: 'Ordinary', via: 'Kanajar', departureTime: '07.32' },
+  { slNo: 17, from: 'Udupi', to: 'Garidimajal', serviceClass: 'Ordinary', via: 'Santhekatte', departureTime: '07.40' },
+  { slNo: 18, from: 'Udupi', to: 'Padukere', serviceClass: 'Ordinary', via: 'Karavali Bipass, Kalmady, Malpe', departureTime: '07.40' },
+  { slNo: 19, from: 'Udupi', to: 'Karkala', serviceClass: 'Ordinary', via: 'Hiriyadka, Bailur, Joduraste', departureTime: '07.42' },
+  { slNo: 20, from: 'Udupi', to: 'Thotam,Hoode', serviceClass: 'Ordinary', via: 'Karavali Bipass, Kalmady, Malpe Beach', departureTime: '07.45' },
+  { slNo: 21, from: 'Udupi', to: 'DC Office', serviceClass: 'Ordinary', via: 'Padubidri', departureTime: '08.06' },
+  { slNo: 22, from: 'Udupi', to: 'Shivamogga', serviceClass: 'Ordinary', via: 'Perdoor, Hebri, Agumbe', departureTime: '08.10' },
+  { slNo: 23, from: 'Udupi', to: 'Perdoor', serviceClass: 'Ordinary', via: 'Brahamagiri, Santhekatte, Kolalgiri', departureTime: '08.15' },
+  { slNo: 24, from: 'Udupi', to: 'Karkala', serviceClass: 'Ordinary', via: 'Hiriyadka, Bailur, Joduraste', departureTime: '08.24' },
+  { slNo: 25, from: 'Udupi', to: 'Hampankatte', serviceClass: 'Ordinary', via: 'Malpe, Kalmady', departureTime: '08.28' },
+  { slNo: 26, from: 'Udupi', to: 'Thenkanidiyoor', serviceClass: 'Ordinary', via: 'Adiudupi, Kodavoor', departureTime: '08.36' },
+  { slNo: 27, from: 'Udupi', to: 'Kemmanu,Hoode', serviceClass: 'Ordinary', via: 'Santhekatte, Nejar, Hoode', departureTime: '08.42' },
+  { slNo: 28, from: 'Udupi', to: 'Kokkarene', serviceClass: 'Ordinary', via: 'Brahmavara, Barkur, Mandarthi', departureTime: '08.45' },
+  { slNo: 29, from: 'Udupi', to: 'Mancha Kallu', serviceClass: 'Ordinary', via: 'Katapadi, Shubhas Nagara, Shankarpura', departureTime: '08.50' },
+  { slNo: 30, from: 'Udupi', to: 'Karkala', serviceClass: 'Ordinary', via: 'Hiriyadka, Bailur, Joduraste', departureTime: '08.57' },
+  { slNo: 31, from: 'Udupi', to: 'Hebri,Nellikatte', serviceClass: 'Ordinary', via: 'Manipal, Hiriyadka, Perdoor', departureTime: '09.00' },
+  { slNo: 32, from: 'Udupi', to: 'Kokkarene', serviceClass: 'Ordinary', via: 'Brahmavara, Barkur, Mandarthi', departureTime: '09.10' },
+  { slNo: 33, from: 'Udupi', to: 'Shivamogga', serviceClass: 'Ordinary', via: 'Perdoor, Hebri, Agumbe', departureTime: '09.10' },
+  { slNo: 34, from: 'Udupi', to: 'Garidimajal', serviceClass: 'Ordinary', via: 'Santhekatte', departureTime: '09.15' },
+  { slNo: 35, from: 'Udupi', to: 'Honnalla', serviceClass: 'Ordinary', via: 'Santhekatte, Brahmavara, Salikere', departureTime: '09.15' },
+  { slNo: 36, from: 'Udupi', to: 'Thotam,Hoode', serviceClass: 'Ordinary', via: 'Karavali Bipass, Kalmady, Malpe Beach', departureTime: '09.23' },
+  { slNo: 37, from: 'Udupi', to: 'Karkala', serviceClass: 'Ordinary', via: 'Hiriyadka, Bailur, Joduraste', departureTime: '09.23' },
+  { slNo: 38, from: 'Udupi', to: 'DC Office', serviceClass: 'Ordinary', via: 'Padubidri', departureTime: '09.30' },
+  { slNo: 39, from: 'Udupi', to: 'Kundapura', serviceClass: 'Ordinary', via: 'Brahmavara, Kota', departureTime: '09.30' },
+  { slNo: 40, from: 'Udupi', to: 'Shringeri', serviceClass: 'Ordinary', via: 'Hebri, Agumbe, Perdoor', departureTime: '09.40' },
+  { slNo: 41, from: 'Udupi', to: 'Hampankatte', serviceClass: 'Ordinary', via: 'Malpe, Kalmady', departureTime: '09.48' },
+  { slNo: 42, from: 'Udupi', to: 'Padukere', serviceClass: 'Ordinary', via: 'Karavali Bipass, Kalmady, Malpe', departureTime: '09.50' },
+  { slNo: 43, from: 'Udupi', to: 'Haladi,Siddapura', serviceClass: 'Ordinary', via: 'Brahmavara, Barkur', departureTime: '09.55' },
+  { slNo: 44, from: 'Udupi', to: 'Haladi', serviceClass: 'Ordinary', via: 'Mandarthi', departureTime: '10.00' },
+  { slNo: 45, from: 'Udupi', to: 'Karkala', serviceClass: 'Ordinary', via: 'Hiriyadka, Bailur, Joduraste', departureTime: '10.02' },
+  { slNo: 46, from: 'Udupi', to: 'Perdoor', serviceClass: 'Ordinary', via: 'Brahamagiri, Santhekatte, Kolalgiri', departureTime: '10.10' },
+  { slNo: 47, from: 'Udupi', to: 'Kemmanu,Hoode', serviceClass: 'Ordinary', via: 'Santhekatte, Nejar, Hoode', departureTime: '10.12' },
+  { slNo: 48, from: 'Udupi', to: 'Kundapura', serviceClass: 'Ordinary', via: 'Brahmavara, Kota', departureTime: '10.15' },
+  { slNo: 49, from: 'Udupi', to: 'Moodubelle', serviceClass: 'Ordinary', via: 'Daina, Moodubelle', departureTime: '10.20' },
+  { slNo: 50, from: 'Udupi', to: 'Hebri,Nellikatte', serviceClass: 'Ordinary', via: 'Manipal, Hiriyadka, Perdoor', departureTime: '10.30' },
+  { slNo: 51, from: 'Udupi', to: 'Perdoor', serviceClass: 'Ordinary', via: 'Brahamagiri, Santhekatte, Kolalgiri', departureTime: '10.40' },
+  { slNo: 52, from: 'Udupi', to: 'Marne', serviceClass: 'Ordinary', via: 'Daina, Alevoor, Kukkikatte', departureTime: '10.45' },
+  { slNo: 53, from: 'Udupi', to: 'Herga', serviceClass: 'Ordinary', via: 'Manipala, Indrali, Parkala', departureTime: '10.46' },
+  { slNo: 54, from: 'Udupi', to: 'Karkala', serviceClass: 'Ordinary', via: 'Kanajar, Hiriyadka', departureTime: '10.46' },
+  { slNo: 55, from: 'Udupi', to: 'Garidimajal', serviceClass: 'Ordinary', via: 'Santhekatte', departureTime: '10.47' },
+  { slNo: 56, from: 'Udupi', to: 'Mancha Kallu', serviceClass: 'Ordinary', via: 'Katapadi, Shubhas Nagara, Shankarpura', departureTime: '10.50' },
+  { slNo: 57, from: 'Udupi', to: 'Karkala', serviceClass: 'Ordinary', via: 'Hiriyadka, Bailur, Joduraste', departureTime: '10.50' },
+  { slNo: 58, from: 'Udupi', to: 'Karkala', serviceClass: 'Ordinary', via: 'Hiriyadka, Bailur, Joduraste', departureTime: '11.01' },
+  { slNo: 59, from: 'Udupi', to: 'Hampankatte', serviceClass: 'Ordinary', via: 'Malpe, Kalmady', departureTime: '11.18' },
+  { slNo: 60, from: 'Udupi', to: 'Malpe', serviceClass: 'Ordinary', via: 'Karavali Bipass, Adiudupi', departureTime: '11.20' },
+  { slNo: 61, from: 'Udupi', to: 'Thotam,Hoode', serviceClass: 'Ordinary', via: 'Karavali Bipass, Kalmady, Malpe Beach', departureTime: '11.26' },
+  { slNo: 62, from: 'Udupi', to: 'Haladi,Siddapura', serviceClass: 'Ordinary', via: 'Brahmavara, Barkur', departureTime: '11.30' },
+  { slNo: 63, from: 'Udupi', to: 'Karkala', serviceClass: 'Ordinary', via: 'Hiriyadka, Bailur, Joduraste', departureTime: '11.32' },
+  { slNo: 64, from: 'Udupi', to: 'DC Office', serviceClass: 'Ordinary', via: 'Padubidri', departureTime: '11.35' },
+  { slNo: 65, from: 'Udupi', to: 'Karkala', serviceClass: 'Ordinary', via: 'Hiriyadka, Bailur, Joduraste', departureTime: '11.43' },
+  { slNo: 66, from: 'Udupi', to: 'Kemmanu,Hoode', serviceClass: 'Ordinary', via: 'Santhekatte, Nejar, Hoode', departureTime: '11.45' },
+  { slNo: 67, from: 'Udupi', to: 'Hebri,Nellikatte', serviceClass: 'Ordinary', via: 'Manipal, Hiriyadka, Perdoor', departureTime: '12.00' },
+  { slNo: 68, from: 'Udupi', to: 'Kundapura', serviceClass: 'Ordinary', via: 'Brahmavara, Kota', departureTime: '12.00' },
+  { slNo: 69, from: 'Udupi', to: 'Herga', serviceClass: 'Ordinary', via: 'Manipala, Indrali, Parkala', departureTime: '12.01' },
+  { slNo: 70, from: 'Udupi', to: 'Kokkarene', serviceClass: 'Ordinary', via: 'Brahmavara, Barkur, Mandarthi', departureTime: '12.10' },
+  { slNo: 71, from: 'Udupi', to: 'Padukere', serviceClass: 'Ordinary', via: 'Karavali Bipass, Kalmady, Malpe', departureTime: '12.10' },
+  { slNo: 72, from: 'Udupi', to: 'Karkala', serviceClass: 'Ordinary', via: 'Hiriyadka, Bailur, Joduraste', departureTime: '12.17' },
+  { slNo: 73, from: 'Udupi', to: 'Kokkarene', serviceClass: 'Ordinary', via: 'Brahmavara, Barkur, Mandarthi', departureTime: '12.30' },
+  { slNo: 74, from: 'Udupi', to: 'Marne', serviceClass: 'Ordinary', via: 'Daina, Alevoor, Kukkikatte', departureTime: '12.35' },
+  { slNo: 75, from: 'Udupi', to: 'Karkala', serviceClass: 'Ordinary', via: 'Hiriyadka, Bailur, Joduraste', departureTime: '12.37' },
+  { slNo: 76, from: 'Udupi', to: 'Garidimajal', serviceClass: 'Ordinary', via: 'Santhekatte', departureTime: '12.40' },
+  { slNo: 77, from: 'Udupi', to: 'Honnalla', serviceClass: 'Ordinary', via: 'Santhekatte, Brahmavara, Salikere', departureTime: '12.40' },
+  { slNo: 78, from: 'Udupi', to: 'Shringeri', serviceClass: 'Ordinary', via: 'Hebri, Agumbe, Perdoor', departureTime: '12.45' },
+  { slNo: 79, from: 'Udupi', to: 'Siddapura,Kollur', serviceClass: 'Ordinary', via: 'Brahmavara, Siddapura', departureTime: '12.45' },
+  { slNo: 80, from: 'Udupi', to: 'Perdoor', serviceClass: 'Ordinary', via: 'Brahamagiri, Santhekatte, Kolalgiri', departureTime: '13.05' },
+  { slNo: 81, from: 'Udupi', to: 'Hampankatte', serviceClass: 'Ordinary', via: 'Malpe, Kalmady', departureTime: '13.07' },
+  { slNo: 82, from: 'Udupi', to: 'Karkala', serviceClass: 'Ordinary', via: 'Daina, Moodubelle', departureTime: '13.25' },
+  { slNo: 83, from: 'Udupi', to: 'Kemmanu,Hoode', serviceClass: 'Ordinary', via: 'Santhekatte, Nejar, Hoode', departureTime: '13.30' },
+  { slNo: 84, from: 'Udupi', to: 'Hebri,Nellikatte', serviceClass: 'Ordinary', via: 'Manipal, Hiriyadka, Perdoor', departureTime: '13.30' },
+  { slNo: 85, from: 'Udupi', to: 'Thotam,Hoode', serviceClass: 'Ordinary', via: 'Karavali Bipass, Kalmady, Malpe Beach', departureTime: '13.42' },
+  { slNo: 86, from: 'Udupi', to: 'Perdoor', serviceClass: 'Ordinary', via: 'Brahamagiri, Santhekatte, Kolalgiri', departureTime: '13.45' },
+  { slNo: 87, from: 'Udupi', to: 'Karkala', serviceClass: 'Ordinary', via: 'Hiriyadka, Kanjar, Bailur', departureTime: '13.46' },
+  { slNo: 88, from: 'Udupi', to: 'Karkala', serviceClass: 'Ordinary', via: 'Hiriyadka, Bailur, Joduraste', departureTime: '13.47' },
+  { slNo: 89, from: 'Udupi', to: 'Karkala', serviceClass: 'Ordinary', via: 'Hiriyadka, Bailur, Joduraste', departureTime: '13.56' },
+  { slNo: 90, from: 'Udupi', to: 'Biruru', serviceClass: 'Ordinary', via: 'Hebri, Agumbe, Perdoor', departureTime: '14.10' },
+  { slNo: 91, from: 'Udupi', to: 'Herga', serviceClass: 'Ordinary', via: 'Manipala, Indrali, Parkala', departureTime: '14.13' },
+  { slNo: 92, from: 'Udupi', to: 'Haladi,Siddapura', serviceClass: 'Ordinary', via: 'Brahmavara, Barkur', departureTime: '14.15' },
+  { slNo: 93, from: 'Udupi', to: 'Marne', serviceClass: 'Ordinary', via: 'Daina, Alevoor, Kukkikatte', departureTime: '14.20' },
+  { slNo: 94, from: 'Udupi', to: 'Padukere', serviceClass: 'Ordinary', via: 'Karavali Bipass, Kalmady, Malpe', departureTime: '14.20' },
+  { slNo: 95, from: 'Udupi', to: 'Karkala', serviceClass: 'Ordinary', via: 'Hiriyadka, Bailur, Joduraste', departureTime: '14.24' },
+  { slNo: 96, from: 'Udupi', to: 'Garidimajal', serviceClass: 'Ordinary', via: 'Santhekatte', departureTime: '14.37' },
+  { slNo: 97, from: 'Udupi', to: 'Amasebailu', serviceClass: 'Ordinary', via: 'Baaliga, Upooru, Brahmavara', departureTime: '14.40' },
+  { slNo: 98, from: 'Udupi', to: 'Karkala', serviceClass: 'Ordinary', via: 'Hiriyadka, Bailur, Joduraste', departureTime: '14.50' },
+  { slNo: 99, from: 'Udupi', to: 'Hampankatte', serviceClass: 'Ordinary', via: 'Malpe, Kalmady', departureTime: '14.57' },
+  { slNo: 100, from: 'Udupi', to: 'Kundapura', serviceClass: 'Ordinary', via: 'Brahmavara, Kota', departureTime: '15.00' },
+  { slNo: 101, from: 'Udupi', to: 'Mancha Kallu', serviceClass: 'Ordinary', via: 'Katapadi, Shubhas Nagara, Shankarpura', departureTime: '15.10' },
+  { slNo: 102, from: 'Udupi', to: 'Shivamogga', serviceClass: 'Ordinary', via: 'Perdoor, Hebri, Agumbe', departureTime: '15.10' },
+  { slNo: 103, from: 'Udupi', to: 'Mandarthi,Haladi', serviceClass: 'Ordinary', via: 'Brahmavara, Barkur', departureTime: '15.15' },
+  { slNo: 104, from: 'Udupi', to: 'Kundapura', serviceClass: 'Ordinary', via: 'Brahmavara, Kota', departureTime: '15.15' },
+  { slNo: 105, from: 'Udupi', to: 'Hebri,Nellikatte', serviceClass: 'Ordinary', via: 'Manipal, Hiriyadka, Perdoor', departureTime: '15.25' },
+  { slNo: 106, from: 'Udupi', to: 'Kokkarene', serviceClass: 'Ordinary', via: 'Brahmavara, Barkur, Mandarthi', departureTime: '15.30' },
+  { slNo: 107, from: 'Udupi', to: 'Thenkanidiyoor', serviceClass: 'Ordinary', via: 'Adiudupi, Kodavoor', departureTime: '15.45' },
+  { slNo: 108, from: 'Udupi', to: 'Shivamogga', serviceClass: 'Ordinary', via: 'Perdoor, Hebri, Agumbe', departureTime: '15.55' },
+  { slNo: 109, from: 'Udupi', to: 'Kokkarene', serviceClass: 'Ordinary', via: 'Brahmavara, Barkur, Mandarthi', departureTime: '16.00' },
+  { slNo: 110, from: 'Udupi', to: 'Perdoor', serviceClass: 'Ordinary', via: 'Brahamagiri, Santhekatte, Kolalgiri', departureTime: '16.00' },
+  { slNo: 111, from: 'Udupi', to: 'Karkala', serviceClass: 'Ordinary', via: 'Hiriyadka, Bailur, Joduraste', departureTime: '16.02' },
+  { slNo: 112, from: 'Udupi', to: 'Thotam,Hoode', serviceClass: 'Ordinary', via: 'Karavali Bipass, Kalmady, Malpe Beach', departureTime: '16.05' },
+  { slNo: 113, from: 'Udupi', to: 'Padukere', serviceClass: 'Ordinary', via: 'Karavali Bipass, Kalmady, Malpe', departureTime: '16.05' },
+  { slNo: 114, from: 'Udupi', to: 'Garidimajal', serviceClass: 'Ordinary', via: 'Santhekatte', departureTime: '16.15' },
+  { slNo: 115, from: 'Udupi', to: 'Haladi,Siddapura', serviceClass: 'Ordinary', via: 'Brahmavara, Barkur', departureTime: '16.15' },
+  { slNo: 116, from: 'Udupi', to: 'Karkala', serviceClass: 'Ordinary', via: 'Hiriyadka, Bailur, Joduraste', departureTime: '16.23' },
+  { slNo: 117, from: 'Udupi', to: 'Karkala', serviceClass: 'Ordinary', via: 'Daina, Moodubelle', departureTime: '16.25' },
+  { slNo: 118, from: 'Udupi', to: 'Marne', serviceClass: 'Ordinary', via: 'Daina, Alevoor, Kukkikatte', departureTime: '16.30' },
+  { slNo: 119, from: 'Udupi', to: 'Hampankatte', serviceClass: 'Ordinary', via: 'Malpe, Kalmady', departureTime: '16.30' },
+  { slNo: 120, from: 'Udupi', to: 'Shivamogga', serviceClass: 'Ordinary', via: 'Perdoor, Hebri, Agumbe', departureTime: '16.35' },
+  { slNo: 121, from: 'Udupi', to: 'Amasebailu', serviceClass: 'Ordinary', via: 'Baaliga, Upooru, Brahmavara', departureTime: '16.40' },
+  { slNo: 122, from: 'Udupi', to: 'Perdoor', serviceClass: 'Ordinary', via: 'Brahamagiri, Santhekatte, Kolalgiri', departureTime: '16.45' },
+  { slNo: 123, from: 'Udupi', to: 'Shringeri', serviceClass: 'Ordinary', via: 'Hebri, Agumbe, Perdoor', departureTime: '16.45' },
+  { slNo: 124, from: 'Udupi', to: 'Karkala', serviceClass: 'Ordinary', via: 'Hiriyadka, Kanjar, Bailur', departureTime: '16.46' },
+  { slNo: 125, from: 'Udupi', to: 'Hebri,Nellikatte', serviceClass: 'Ordinary', via: 'Manipal, Hiriyadka, Perdoor', departureTime: '16.50' },
+  { slNo: 126, from: 'Udupi', to: 'Karkala', serviceClass: 'Ordinary', via: 'Hiriyadka, Bailur, Joduraste', departureTime: '16.51' },
+  { slNo: 127, from: 'Udupi', to: 'Honnalla', serviceClass: 'Ordinary', via: 'Santhekatte, Brahmavara, Salikere', departureTime: '17.00' },
+  { slNo: 128, from: 'Udupi', to: 'Shivamogga', serviceClass: 'Ordinary', via: 'Perdoor, Hebri, Agumbe', departureTime: '17.00' },
+  { slNo: 129, from: 'Udupi', to: 'DC Office', serviceClass: 'Ordinary', via: 'Padubidri', departureTime: '17.05' },
+  { slNo: 130, from: 'Udupi', to: 'Kemmanu,Hoode', serviceClass: 'Ordinary', via: 'Santhekatte, Nejar, Hoode', departureTime: '17.05' },
+  { slNo: 131, from: 'Udupi', to: 'Mancha Kallu', serviceClass: 'Ordinary', via: 'Katapadi, Shubhas Nagara, Shankarpura', departureTime: '17.20' },
+  { slNo: 132, from: 'Udupi', to: 'Karkala', serviceClass: 'Ordinary', via: 'Hiriyadka, Bailur, Joduraste', departureTime: '17.22' },
+  { slNo: 133, from: 'Udupi', to: 'Marne', serviceClass: 'Ordinary', via: 'Daina, Alevoor, Kukkikatte', departureTime: '17.35' },
+  { slNo: 134, from: 'Udupi', to: 'Thotam,Hoode', serviceClass: 'Ordinary', via: 'Karavali Bipass, Kalmady, Malpe Beach', departureTime: '17.38' },
+  { slNo: 135, from: 'Udupi', to: 'Garidimajal', serviceClass: 'Ordinary', via: 'Santhekatte', departureTime: '17.45' },
+  { slNo: 136, from: 'Udupi', to: 'Karkala', serviceClass: 'Ordinary', via: 'Hiriyadka, Bailur, Joduraste', departureTime: '18.02' },
+  { slNo: 137, from: 'Udupi', to: 'Padukere', serviceClass: 'Ordinary', via: 'Karavali Bipass, Kalmady, Malpe', departureTime: '18.10' },
+  { slNo: 138, from: 'Udupi', to: 'Kokkarene', serviceClass: 'Ordinary', via: 'Brahmavara, Barkur, Mandarthi', departureTime: '18.35' },
+  { slNo: 139, from: 'Udupi', to: 'Perdoor', serviceClass: 'Ordinary', via: 'Brahamagiri, Santhekatte, Kolalgiri', departureTime: '18.50' },
+];
+
+export function buildStopsForSchedule(row: UdupiScheduleRow): Array<PlaceCoord & { order: number }> {
+  const names: string[] = [];
+  const pushUnique = (rawName: string) => {
+    const clean = rawName.trim();
+    if (!clean) return;
+    const coord = UDUPI_PLACE_COORDS[clean];
+    const resolvedName = coord ? coord.name : clean;
+    if (!names.includes(resolvedName)) {
+      names.push(clean);
+    }
+  };
+
+  pushUnique(row.from);
+  row.via.split(',').forEach(pushUnique);
+  row.to.split(',').forEach(pushUnique);
+
+  const seenNames = new Set<string>();
+  const result: Array<PlaceCoord & { order: number }> = [];
+  for (const key of names) {
+    const c = UDUPI_PLACE_COORDS[key] || { name: key, latitude: 13.3409, longitude: 74.7421 };
+    if (!seenNames.has(c.name)) {
+      seenNames.add(c.name);
+      result.push({ ...c, order: result.length + 1 });
+    }
+  }
+  return result;
+}

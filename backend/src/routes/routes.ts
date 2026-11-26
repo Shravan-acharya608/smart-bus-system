@@ -8,9 +8,13 @@ import {
   getStops,
   createStop,
   searchBuses,
+  getUdupiSchedules,
 } from '../controllers/routeController';
 
 const router = Router();
+
+// Public Udupi Bus Stand 139-schedule timetable with stop coordinates
+router.get('/udupi-schedules', (req, res) => getUdupiSchedules(req as any, res));
 
 router.use(authenticateToken);
 

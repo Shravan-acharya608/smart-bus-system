@@ -66,6 +66,7 @@ fun PassengerDashboardScreen(
     var myTickets by remember { mutableStateOf<List<Ticket>>(emptyList()) }
     var frequentCommutes by remember { mutableStateOf<List<FrequentRouteItem>>(emptyList()) }
     var allStops by remember { mutableStateOf<List<Stop>>(emptyList()) }
+    var udupiSchedules by remember { mutableStateOf<List<UdupiScheduleItem>>(UdupiLocalTimetable.all139Schedules) }
     var busSearchResults by remember { mutableStateOf<List<BusSearchResult>>(emptyList()) }
     var isSearchingBuses by remember { mutableStateOf(false) }
     var searchErrorMsg by remember { mutableStateOf<String?>(null) }
@@ -94,6 +95,7 @@ fun PassengerDashboardScreen(
     var showDestAlertModal by remember { mutableStateOf(false) }
     var preselectedAlertStopId by remember { mutableStateOf<String?>(null) }
     var preselectedAlertTripId by remember { mutableStateOf<String?>(null) }
+    var preselectedCustomStop by remember { mutableStateOf<Stop?>(null) }
 
     var pendingStartAlertParams by remember { mutableStateOf<(() -> Unit)?>(null) }
     val alertPermissionLauncher = rememberLauncherForActivityResult(
@@ -150,6 +152,7 @@ fun PassengerDashboardScreen(
             app.transitRepository.getTrips(status = "ACTIVE").onSuccess { activeTrips = it }
             app.transitRepository.getMyTickets().onSuccess { myTickets = it }
             app.transitRepository.getStops().onSuccess { allStops = it }
+            app.transitRepository.getUdupiSchedules().onSuccess { if (it.isNotEmpty()) udupiSchedules = it }
             app.transitRepository.getFrequentCommutes().onSuccess { frequentCommutes = it }
             app.transitRepository.getPermanentPass().onSuccess { pass ->
                 permanentPassData = pass
@@ -182,6 +185,7 @@ fun PassengerDashboardScreen(
                             0 -> "Search Routes & Buses"
                             1 -> "Live Bus Tracking"
                             2 -> "My Tickets"
+                            4 -> "Udupi 139 Buses"
                             else -> "Passenger Profile"
                         },
                         fontWeight = FontWeight.Bold
@@ -217,10 +221,16 @@ fun PassengerDashboardScreen(
                     label = { Text("Explore") }
                 )
                 NavigationBarItem(
+                    selected = selectedNavIndex == 4,
+                    onClick = { selectedNavIndex = 4 },
+                    icon = { Icon(Icons.Default.DirectionsBus, contentDescription = null) },
+                    label = { Text("139 Buses") }
+                )
+                NavigationBarItem(
                     selected = selectedNavIndex == 1,
                     onClick = { selectedNavIndex = 1 },
                     icon = { Icon(Icons.Default.LocationOn, contentDescription = null) },
-                    label = { Text("Live Map") }
+                    label = { Text("Map") }
                 )
                 NavigationBarItem(
                     selected = selectedNavIndex == 2,
@@ -355,6 +365,32 @@ fun PassengerDashboardScreen(
                                 fontWeight = FontWeight.ExtraBold,
                                 color = if (destAlertState.isActive) Color(0xFFFDE047) else Color(0xFF6D28D9)
                             )
+                        }
+                    }
+
+                    // All 139 Udupi Bus Stand Schedules & Map Explorer Banner
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFFE0F2FE)),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 4.dp)
+                            .clickable { selectedNavIndex = 4 }
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp).fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                                Icon(Icons.Default.Schedule, contentDescription = null, tint = Color(0xFF0369A1), modifier = Modifier.size(20.dp))
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Column {
+                                    Text("Udupi Bus Stand Timetable (${udupiSchedules.size} Buses)", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = Color(0xFF0C4A6E))
+                                    Text("Perdoor, Karkala, Hebri, Shivamogga, Malpe, Mancha Kallu → View Maps", fontSize = 10.sp, color = Color(0xFF0369A1))
+                                }
+                            }
+                            Icon(Icons.Default.ChevronRight, contentDescription = null, tint = Color(0xFF0369A1))
                         }
                     }
 
@@ -505,6 +541,19 @@ fun PassengerDashboardScreen(
                             app.authRepository.logout()
                             onLogout()
                         }
+                    }
+                )
+                4 -> UdupiTimetableView(
+                    schedules = udupiSchedules,
+                    onSetWakeUpAlarmForStop = { stopCoord, tripId ->
+                        preselectedCustomStop = Stop(
+                            id = "custom-${stopCoord.name}",
+                            name = stopCoord.name,
+                            latitude = stopCoord.latitude,
+                            longitude = stopCoord.longitude
+                        )
+                        preselectedAlertTripId = tripId
+                        showDestAlertModal = true
                     }
                 )
             }
@@ -869,12 +918,20 @@ fun PassengerDashboardScreen(
             )
         }
         val availableStops = if (allStops.isNotEmpty()) allStops else fallbackStops
-        var pickedStop by remember(preselectedAlertStopId, availableStops) {
+        var stopSearchQuery by remember { mutableStateOf("") }
+        var pickedStop by remember(preselectedAlertStopId, preselectedCustomStop, availableStops) {
             mutableStateOf(
-                availableStops.find { it.id == preselectedAlertStopId }
+                preselectedCustomStop
+                    ?: availableStops.find { it.id == preselectedAlertStopId }
                     ?: availableStops.find { it.name.contains("Katpadi", ignoreCase = true) }
                     ?: availableStops.last()
             )
+        }
+        val filteredAlertStops = remember(availableStops, stopSearchQuery, pickedStop) {
+            val base = if (stopSearchQuery.isBlank()) availableStops.take(8) else availableStops.filter {
+                it.name.contains(stopSearchQuery, ignoreCase = true)
+            }.take(12)
+            if (base.any { it.id == pickedStop.id }) base else listOf(pickedStop) + base
         }
         var selectedRadius by remember { mutableStateOf(1000) }
         var isLoudNightMode by remember { mutableStateOf(true) }
@@ -912,7 +969,14 @@ fun PassengerDashboardScreen(
                     }
 
                     Text("Select Alighting Stop:", fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                    availableStops.forEach { stop ->
+                    OutlinedTextField(
+                        value = stopSearchQuery,
+                        onValueChange = { stopSearchQuery = it },
+                        placeholder = { Text("Type stop (e.g. Perdoor, Karkala, Hebri)...", fontSize = 11.sp) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    filteredAlertStops.forEach { stop ->
                         Surface(
                             onClick = { pickedStop = stop },
                             shape = RoundedCornerShape(10.dp),
