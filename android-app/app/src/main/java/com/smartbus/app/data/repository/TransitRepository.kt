@@ -183,4 +183,89 @@ class TransitRepository(private val apiService: ApiService) {
             Result.failure(e)
         }
     }
+
+    suspend fun applyForJob(request: JobApplicationRequest): Result<String> {
+        return try {
+            val res = apiService.applyForJob(request)
+            if (res.isSuccessful && res.body()?.success == true) {
+                Result.success(res.body()?.message ?: "Application submitted successfully!")
+            } else {
+                Result.failure(Exception(res.body()?.error?.message ?: "Failed to submit application"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun getPermanentPass(): Result<PermanentPassData> {
+        return try {
+            val res = apiService.getPermanentPass()
+            if (res.isSuccessful && res.body()?.success == true) {
+                Result.success(res.body()!!.data!!)
+            } else {
+                Result.failure(Exception(res.body()?.error?.message ?: "Failed to load permanent pass"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun regeneratePermanentPass(): Result<PermanentPassData> {
+        return try {
+            val res = apiService.regeneratePermanentPass()
+            if (res.isSuccessful && res.body()?.success == true) {
+                Result.success(res.body()!!.data!!)
+            } else {
+                Result.failure(Exception(res.body()?.error?.message ?: "Failed to update pass"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun topUpWallet(amount: Double): Result<Double> {
+        return try {
+            val res = apiService.topUpWallet(WalletTopUpRequest(amount))
+            if (res.isSuccessful && res.body()?.success == true) {
+                Result.success(res.body()!!.data!!.walletBalance)
+            } else {
+                Result.failure(Exception(res.body()?.error?.message ?: "Top-up failed"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun getStaffDetails(): Result<StaffDetailsResponse> {
+        return try {
+            val res = apiService.getStaffDetails()
+            if (res.isSuccessful && res.body()?.success == true) {
+                Result.success(res.body()!!.data!!)
+            } else {
+                Result.failure(Exception(res.body()?.error?.message ?: "Failed to load staff details"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun payInstantTicket(
+        tripId: String,
+        boardingStopId: String,
+        destinationStopId: String,
+        paymentMode: String
+    ): Result<InstantPayResponse> {
+        return try {
+            val res = apiService.payInstantTicket(
+                InstantPayRequest(tripId, boardingStopId, destinationStopId, paymentMode)
+            )
+            if (res.isSuccessful && res.body()?.success == true) {
+                Result.success(res.body()!!.data!!)
+            } else {
+                Result.failure(Exception(res.body()?.error?.message ?: "Payment failed"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
 }

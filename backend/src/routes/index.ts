@@ -11,6 +11,7 @@ import journeyRouter from './journey';
 import notificationRouter from './notifications';
 import commuteRouter from './commutes';
 import incidentRouter from './incidents';
+import jobRouter from './jobs';
 
 const router = Router();
 
@@ -60,5 +61,6 @@ router.use('/journey-sharing', journeyRouter);
 router.use('/notifications', notificationRouter);
 router.use('/commutes', commuteRouter);
 router.use('/incidents', incidentRouter);
+router.use('/jobs', jobRouter);
 
 export default router;

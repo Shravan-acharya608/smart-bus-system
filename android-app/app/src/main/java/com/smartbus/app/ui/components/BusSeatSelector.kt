@@ -37,7 +37,7 @@ fun BusSeatSelector(
     routeName: String,
     baseFare: Double,
     availableSeatsCount: Int,
-    onConfirmBooking: (List<String>, Double) -> Unit,
+    onConfirmBooking: (List<String>, Double, String) -> Unit,
     onHoldBooking: (List<String>, Double) -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -445,7 +445,7 @@ fun BusSeatSelector(
                                     if (selectedPaymentMethod == "CASH") {
                                         onHoldBooking(selectedSeats.toList(), totalFare)
                                     } else {
-                                        onConfirmBooking(selectedSeats.toList(), totalFare)
+                                        onConfirmBooking(selectedSeats.toList(), totalFare, selectedPaymentMethod)
                                     }
                                 },
                                 modifier = Modifier.weight(1.5f),

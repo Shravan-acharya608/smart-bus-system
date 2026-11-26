@@ -2,10 +2,15 @@ package com.smartbus.app.ui.screens.passenger
 
 import android.content.Intent
 import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.Typeface
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -25,6 +30,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.print.PrintHelper
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.qrcode.QRCodeWriter
 import com.smartbus.app.SmartBusApplication
@@ -32,6 +38,7 @@ import com.smartbus.app.data.model.*
 import com.smartbus.app.ui.components.BoardingPassCard
 import com.smartbus.app.ui.components.BusLiveMap
 import com.smartbus.app.ui.components.RollingQRCode
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -67,7 +74,10 @@ fun PassengerDashboardScreen(
     var qrTicketToShow by remember { mutableStateOf<Ticket?>(null) }
     var showPermanentPassModal by remember { mutableStateOf(false) }
     var showPrintableIdCard by remember { mutableStateOf(false) }
+    var permanentPassData by remember { mutableStateOf<PermanentPassData?>(null) }
     var permanentPassCode by remember { mutableStateOf("KA-PASS-8842") }
+    var passengerDisplayName by remember { mutableStateOf("Passenger") }
+    var walletBalance by remember { mutableStateOf(500.0) }
     var activeShareLink by remember { mutableStateOf<String?>(null) }
     var statusMessage by remember { mutableStateOf<String?>(null) }
 
@@ -101,12 +111,26 @@ fun PassengerDashboardScreen(
             app.transitRepository.getMyTickets().onSuccess { myTickets = it }
             app.transitRepository.getStops().onSuccess { allStops = it }
             app.transitRepository.getFrequentCommutes().onSuccess { frequentCommutes = it }
+            app.transitRepository.getPermanentPass().onSuccess { pass ->
+                permanentPassData = pass
+                permanentPassCode = pass.passCode
+                passengerDisplayName = pass.fullName
+                walletBalance = pass.walletBalance
+            }
             isLoading = false
         }
     }
 
     LaunchedEffect(Unit) {
         refreshData()
+    }
+
+    // Auto-poll live GPS positions every 6 seconds while viewing Live Map
+    LaunchedEffect(selectedNavIndex) {
+        while (selectedNavIndex == 1) {
+            delay(6000L)
+            app.transitRepository.getTrips(status = "ACTIVE").onSuccess { activeTrips = it }
+        }
     }
 
     Scaffold(
@@ -169,6 +193,98 @@ fun PassengerDashboardScreen(
         Box(modifier = Modifier.fillMaxSize().padding(padding)) {
             when (selectedNavIndex) {
                 0 -> Column(modifier = Modifier.fillMaxSize()) {
+                    // Status / Payment confirmation banner
+                    if (statusMessage != null) {
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFFDCFCE7)),
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(12.dp).fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(statusMessage!!, color = Color(0xFF15803D), fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                                IconButton(onClick = { statusMessage = null }, modifier = Modifier.size(20.dp)) {
+                                    Icon(Icons.Default.Close, contentDescription = "Dismiss", tint = Color(0xFF15803D), modifier = Modifier.size(16.dp))
+                                }
+                            }
+                        }
+                    }
+
+                    // Quick Wallet & Permanent Pass Bar
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFF0F172A)),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.weight(1f).clickable { selectedNavIndex = 3 }
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column {
+                                    Text("TAP & PAY WALLET", color = Color(0xFF94A3B8), fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                                    Text("₹${walletBalance.toInt()}", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.ExtraBold)
+                                }
+                                Icon(Icons.Default.AccountBalanceWallet, contentDescription = null, tint = Color(0xFF10B981), modifier = Modifier.size(20.dp))
+                            }
+                        }
+
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFF0284C7)),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.weight(1f).clickable { showPermanentPassModal = true }
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column {
+                                    Text("PERMANENT ID QR", color = Color(0xFFBAE6FD), fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                                    Text(permanentPassCode.take(12), color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                                }
+                                Icon(Icons.Default.QrCode2, contentDescription = null, tint = Color.White, modifier = Modifier.size(22.dp))
+                            }
+                        }
+                    }
+
+                    // Quick Popular Karnataka Route Chips (always visible for 1-tap search)
+                    if (allStops.isNotEmpty()) {
+                        LazyRow(
+                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            val quickPairs = listOf(
+                                Triple("Udupi → Katpadi (₹20)", "Udupi", "Katpadi"),
+                                Triple("Udupi → Shirva (₹45)", "Udupi", "Shirva"),
+                                Triple("Katpadi → Shirva (₹25)", "Katpadi", "Shirva")
+                            )
+                            items(quickPairs) { (label, fromKey, toKey) ->
+                                AssistChip(
+                                    onClick = {
+                                        val s1 = allStops.find { it.name.contains(fromKey, ignoreCase = true) }
+                                        val s2 = allStops.find { it.name.contains(toKey, ignoreCase = true) }
+                                        if (s1 != null && s2 != null) {
+                                            selectedBoardingStopId = s1.id
+                                            selectedDestStopId = s2.id
+                                            executeBusSearch()
+                                        }
+                                    },
+                                    label = { Text(label, fontSize = 11.sp, fontWeight = FontWeight.SemiBold) },
+                                    leadingIcon = { Icon(Icons.Default.Bolt, contentDescription = null, modifier = Modifier.size(14.dp), tint = Color(0xFF0284C7)) }
+                                )
+                            }
+                        }
+                    }
+
                     FrequentCommuteSection(
                         commutes = frequentCommutes,
                         onSelectCommute = { bId, dId ->
@@ -187,15 +303,20 @@ fun PassengerDashboardScreen(
                         onSelectBoardingStop = { selectedBoardingStopId = it },
                         onSelectDestStop = { selectedDestStopId = it },
                         onSearch = { executeBusSearch() },
-                        onBookNow = { bus ->
+                        onBookNow = { bus, paymentMode ->
                             val bId = selectedBoardingStopId ?: return@RouteSearchScreen
                             val dId = selectedDestStopId ?: return@RouteSearchScreen
                             scope.launch {
                                 isLoading = true
-                                app.transitRepository.bookTicket(bus.tripId, bId, dId)
-                                    .onSuccess {
+                                app.transitRepository.payInstantTicket(bus.tripId, bId, dId, paymentMode)
+                                    .onSuccess { payRes ->
+                                        walletBalance = payRes.walletBalance
+                                        statusMessage = "✅ Paid ₹${payRes.ticket.fare.toInt()} via $paymentMode! Ticket is ready."
                                         refreshData()
                                         selectedNavIndex = 2
+                                    }
+                                    .onFailure { err ->
+                                        statusMessage = "⚠️ Payment failed: ${err.message}"
                                     }
                                 isLoading = false
                             }
@@ -207,8 +328,12 @@ fun PassengerDashboardScreen(
                                 isLoading = true
                                 app.transitRepository.holdTicket(bus.tripId, bId, dId)
                                     .onSuccess {
+                                        statusMessage = "🎟️ Seat Held! Pay ₹${it.fare.toInt()} to the conductor on boarding."
                                         refreshData()
                                         selectedNavIndex = 2
+                                    }
+                                    .onFailure { err ->
+                                        statusMessage = "⚠️ Could not hold seat: ${err.message}"
                                     }
                                 isLoading = false
                             }
@@ -221,10 +346,10 @@ fun PassengerDashboardScreen(
                     onShareJourney = { tripId ->
                         scope.launch {
                             app.transitRepository.shareJourney(tripId).onSuccess {
-                                activeShareLink = "http://10.0.2.2:3000/shared-journey/${it.shareToken}"
+                                activeShareLink = "https://smart-bus-system-tan.vercel.app/shared-journey/${it.shareToken}"
                                 val sendIntent: Intent = Intent().apply {
                                     action = Intent.ACTION_SEND
-                                    putExtra(Intent.EXTRA_TEXT, "Track my bus journey live: $activeShareLink")
+                                    putExtra(Intent.EXTRA_TEXT, "Track my SmartBus journey live: $activeShareLink")
                                     type = "text/plain"
                                 }
                                 context.startActivity(Intent.createChooser(sendIntent, "Share with Family"))
@@ -241,10 +366,10 @@ fun PassengerDashboardScreen(
                     onShareJourney = { tripId ->
                         scope.launch {
                             app.transitRepository.shareJourney(tripId).onSuccess {
-                                activeShareLink = "http://10.236.83.220:3000/shared-journey/${it.shareToken}"
+                                activeShareLink = "https://smart-bus-system-tan.vercel.app/shared-journey/${it.shareToken}"
                                 val sendIntent: Intent = Intent().apply {
                                     action = Intent.ACTION_SEND
-                                    putExtra(Intent.EXTRA_TEXT, "Track my bus journey live: $activeShareLink")
+                                    putExtra(Intent.EXTRA_TEXT, "Track my SmartBus journey live: $activeShareLink")
                                     type = "text/plain"
                                 }
                                 context.startActivity(Intent.createChooser(sendIntent, "Share with Family"))
@@ -253,6 +378,16 @@ fun PassengerDashboardScreen(
                     }
                 )
                 3 -> ProfileTab(
+                    passengerName = passengerDisplayName,
+                    walletBalance = walletBalance,
+                    onTopUpWallet = { amount ->
+                        scope.launch {
+                            app.transitRepository.topUpWallet(amount).onSuccess { newBal ->
+                                walletBalance = newBal
+                                statusMessage = "✅ ₹${amount.toInt()} added to Tap & Pay Wallet!"
+                            }
+                        }
+                    },
                     onOpenPermanentPass = { showPermanentPassModal = true },
                     onLogout = {
                         scope.launch {
@@ -372,8 +507,9 @@ fun PassengerDashboardScreen(
 
     // Permanent Smart Transit Pass Modal
     if (showPermanentPassModal) {
-        val qrPayload = "SMARTBUS-PASS:$permanentPassCode:Alice Passenger"
+        val qrPayload = "SMARTBUS-PASS:$permanentPassCode:$passengerDisplayName"
         val qrBitmap = remember(qrPayload) { generateQrCode(qrPayload) }
+        var isRegenerating by remember { mutableStateOf(false) }
 
         Dialog(onDismissRequest = { showPermanentPassModal = false }) {
             Card(
@@ -427,7 +563,7 @@ fun PassengerDashboardScreen(
 
                     Spacer(modifier = Modifier.height(12.dp))
                     Text("Pass ID: $permanentPassCode", fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 15.sp, color = Color(0xFF0F172A))
-                    Text("Holder: Alice Passenger", fontSize = 13.sp, color = Color.Gray)
+                    Text("Holder: $passengerDisplayName", fontSize = 13.sp, color = Color.Gray)
                     Text("Corridor: Udupi – Katpadi – Shirva", fontSize = 11.sp, color = Color(0xFF0284C7))
 
                     Spacer(modifier = Modifier.height(10.dp))
@@ -437,7 +573,7 @@ fun PassengerDashboardScreen(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text(
-                            "ℹ️ Permanent QR: Valid indefinitely until you reset it. Present this to the conductor on boarding, or print it out to stick on your card.",
+                            "ℹ️ Permanent QR: Valid indefinitely until you change it. Present this to the conductor on boarding, or print it out to stick on your card.",
                             fontSize = 11.sp,
                             color = Color(0xFF475569),
                             modifier = Modifier.padding(10.dp),
@@ -445,7 +581,29 @@ fun PassengerDashboardScreen(
                         )
                     }
 
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    OutlinedButton(
+                        enabled = !isRegenerating,
+                        onClick = {
+                            isRegenerating = true
+                            scope.launch {
+                                app.transitRepository.regeneratePermanentPass().onSuccess { updated ->
+                                    permanentPassCode = updated.passCode
+                                    statusMessage = "🔄 Permanent Pass QR updated to ${updated.passCode}!"
+                                }
+                                isRegenerating = false
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Icon(Icons.Default.Autorenew, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(if (isRegenerating) "Updating QR..." else "Change / Regenerate Pass QR", fontSize = 12.sp)
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -460,7 +618,7 @@ fun PassengerDashboardScreen(
                         ) {
                             Icon(Icons.Default.Print, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("Print Card", fontSize = 12.sp)
+                            Text("Print ID Card", fontSize = 12.sp)
                         }
 
                         Button(
@@ -478,7 +636,7 @@ fun PassengerDashboardScreen(
 
     // Printable Physical ID Badge Dialog
     if (showPrintableIdCard) {
-        val qrPayload = "SMARTBUS-PASS:$permanentPassCode:Alice Passenger"
+        val qrPayload = "SMARTBUS-PASS:$permanentPassCode:$passengerDisplayName"
         val qrBitmap = remember(qrPayload) { generateQrCode(qrPayload) }
 
         Dialog(onDismissRequest = { showPrintableIdCard = false }) {
@@ -522,7 +680,7 @@ fun PassengerDashboardScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Column(modifier = Modifier.weight(1f)) {
-                                    Text("ALICE PASSENGER", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                    Text(passengerDisplayName.uppercase(), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                                     Text("Pass: $permanentPassCode", color = Color(0xFF94A3B8), fontFamily = FontFamily.Monospace, fontSize = 11.sp)
                                     Text("Route: Udupi - Shirva", color = Color(0xFF38BDF8), fontSize = 11.sp)
                                     Spacer(modifier = Modifier.height(6.dp))
@@ -556,12 +714,32 @@ fun PassengerDashboardScreen(
                     )
 
                     Spacer(modifier = Modifier.height(14.dp))
-                    Button(
-                        onClick = { showPrintableIdCard = false },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(10.dp)
-                    ) {
-                        Text("Close Card Preview")
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(
+                            onClick = { showPrintableIdCard = false },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Text("Close")
+                        }
+                        Button(
+                            onClick = {
+                                if (qrBitmap != null) {
+                                    val printableBmp = createPrintableIdCardBitmap(passengerDisplayName, permanentPassCode, qrBitmap)
+                                    val printHelper = PrintHelper(context).apply {
+                                        scaleMode = PrintHelper.SCALE_MODE_FIT
+                                    }
+                                    printHelper.printBitmap("SmartBus_Pass_$permanentPassCode", printableBmp)
+                                }
+                            },
+                            modifier = Modifier.weight(1.4f),
+                            shape = RoundedCornerShape(10.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0284C7))
+                        ) {
+                            Icon(Icons.Default.Print, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Print / Save PDF")
+                        }
                     }
                 }
             }
@@ -925,12 +1103,12 @@ fun MyTicketsTab(
 
 @Composable
 fun ProfileTab(
+    passengerName: String,
+    walletBalance: Double,
+    onTopUpWallet: (Double) -> Unit,
     onOpenPermanentPass: () -> Unit,
     onLogout: () -> Unit
 ) {
-    var walletBalance by remember { mutableStateOf(250.0) }
-    var showAddMoneyDialog by remember { mutableStateOf(false) }
-
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -949,7 +1127,7 @@ fun ProfileTab(
         }
 
         Spacer(modifier = Modifier.height(12.dp))
-        Text("Passenger Account", fontWeight = FontWeight.ExtraBold, fontSize = 20.sp)
+        Text(passengerName, fontWeight = FontWeight.ExtraBold, fontSize = 20.sp)
         Text("SmartBus Transit Member • Verified", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -1011,9 +1189,7 @@ fun ProfileTab(
                         Text("₹${walletBalance.toInt()}", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold)
                     }
                     Button(
-                        onClick = {
-                            walletBalance += 100.0
-                        },
+                        onClick = { onTopUpWallet(100.0) },
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981)),
                         shape = RoundedCornerShape(10.dp),
                         contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
@@ -1113,4 +1289,62 @@ fun generateQrCode(text: String): Bitmap? {
     } catch (e: Exception) {
         null
     }
+}
+
+// Render high-res CR80 printable ID card bitmap with QR code for PrintHelper
+fun createPrintableIdCardBitmap(name: String, passCode: String, qrBitmap: Bitmap): Bitmap {
+    val width = 1000
+    val height = 620
+    val bmp = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+    val canvas = Canvas(bmp)
+
+    // White print margin background
+    canvas.drawColor(android.graphics.Color.WHITE)
+
+    // Card Dark Navy Background
+    val bgPaint = Paint().apply { color = android.graphics.Color.parseColor("#0F172A") }
+    canvas.drawRoundRect(40f, 40f, 960f, 580f, 36f, 36f, bgPaint)
+
+    val goldPaint = Paint().apply {
+        color = android.graphics.Color.parseColor("#F59E0B")
+        textSize = 34f
+        typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+    }
+    canvas.drawText("KARNATAKA SMARTBUS • TRANSIT PASS", 80f, 115f, goldPaint)
+
+    val namePaint = Paint().apply {
+        color = android.graphics.Color.WHITE
+        textSize = 46f
+        typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+    }
+    canvas.drawText(name.uppercase(), 80f, 220f, namePaint)
+
+    val subPaint = Paint().apply {
+        color = android.graphics.Color.parseColor("#94A3B8")
+        textSize = 30f
+        typeface = Typeface.MONOSPACE
+    }
+    canvas.drawText("Pass ID: $passCode", 80f, 285f, subPaint)
+
+    val routePaint = Paint().apply {
+        color = android.graphics.Color.parseColor("#38BDF8")
+        textSize = 28f
+        typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+    }
+    canvas.drawText("Route: Udupi – Katpadi – Shirva", 80f, 355f, routePaint)
+
+    val validPaint = Paint().apply {
+        color = android.graphics.Color.parseColor("#10B981")
+        textSize = 26f
+        typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+    }
+    canvas.drawText("PERMANENT ID • VALID UNTIL CHANGED", 80f, 515f, validPaint)
+
+    // White QR container
+    val whitePaint = Paint().apply { color = android.graphics.Color.WHITE }
+    canvas.drawRoundRect(640f, 175f, 920f, 455f, 20f, 20f, whitePaint)
+    val scaledQr = Bitmap.createScaledBitmap(qrBitmap, 250, 250, false)
+    canvas.drawBitmap(scaledQr, 655f, 190f, null)
+
+    return bmp
 }

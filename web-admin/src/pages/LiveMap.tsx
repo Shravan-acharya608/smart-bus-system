@@ -34,7 +34,7 @@ const LiveMap: React.FC = () => {
       const res = await apiClient.get<ApiResponse<DashboardResponse>>('/admin/dashboard');
       return res.data.data?.fleetStatus || [];
     },
-    refetchInterval: 12000, // Refresh every 12 seconds
+    refetchInterval: 5000, // Refresh every 5 seconds for live driver GPS updates
   });
 
   // 2. Fetch routes & stops for the corridor (Udupi - Katpadi - Shirva)

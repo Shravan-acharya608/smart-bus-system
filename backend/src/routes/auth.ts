@@ -5,6 +5,13 @@ import {
   refreshToken,
   logout,
 } from '../controllers/authController';
+import {
+  getPermanentPass,
+  regeneratePermanentPass,
+  topUpWallet,
+  getStaffDetailsAndSalary,
+} from '../controllers/profileExtrasController';
+import { authenticateToken } from '../middleware/auth';
 
 const router = Router();
 
@@ -31,5 +38,11 @@ router.post('/refresh', refreshToken);
  * Public – revoke refresh token (idempotent).
  */
 router.post('/logout', logout);
+
+// Authenticated user pass, wallet & staff profile endpoints
+router.get('/pass', authenticateToken, (req, res) => getPermanentPass(req as any, res));
+router.post('/pass/regenerate', authenticateToken, (req, res) => regeneratePermanentPass(req as any, res));
+router.post('/wallet/topup', authenticateToken, (req, res) => topUpWallet(req as any, res));
+router.get('/staff-details', authenticateToken, (req, res) => getStaffDetailsAndSalary(req as any, res));
 
 export default router;

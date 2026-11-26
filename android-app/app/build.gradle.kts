@@ -22,8 +22,8 @@ android {
         applicationId = "com.smartbus.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 3
+        versionName = "1.2.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         manifestPlaceholders["MAPS_API_KEY"] = localProperties.getProperty("MAPS_API_KEY", "")
@@ -113,9 +113,10 @@ dependencies {
     implementation("com.google.android.gms:play-services-maps:19.0.0")
     implementation("com.google.maps.android:maps-compose:4.4.1")
 
-    // QR Code Generation & Scanning (ZXing Embedded)
+    // QR Code Generation & Scanning (ZXing Embedded) & Printing
     implementation("com.journeyapps:zxing-android-embedded:4.3.0")
     implementation("com.google.zxing:core:3.5.3")
+    implementation("androidx.print:print:1.1.0")
 
     // Testing
     testImplementation("junit:junit:4.13.2")

@@ -19,6 +19,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.smartbus.app.SmartBusApplication
+import com.smartbus.app.data.model.JobApplicationRequest
 import com.smartbus.app.data.model.UserRole
 import kotlinx.coroutines.launch
 
@@ -42,6 +43,8 @@ fun LoginScreen(
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var showServerConfigDialog by remember { mutableStateOf(false) }
+    var showJobApplyDialog by remember { mutableStateOf(false) }
+    var jobApplySuccessMsg by remember { mutableStateOf<String?>(null) }
     val savedBaseUrl by app.authRepository.baseUrlFlow.collectAsState(initial = com.smartbus.app.BuildConfig.BASE_URL)
     var currentBaseUrl by remember { mutableStateOf(savedBaseUrl) }
 
@@ -260,7 +263,160 @@ fun LoginScreen(
                     modifier = Modifier.padding(horizontal = 8.dp)
                 )
             }
+
+            Spacer(modifier = Modifier.height(20.dp))
+            HorizontalDivider()
+            Spacer(modifier = Modifier.height(16.dp))
+
+            if (jobApplySuccessMsg != null) {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFECFDF5)),
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
+                ) {
+                    Text(
+                        jobApplySuccessMsg!!,
+                        color = Color(0xFF065F46),
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier.padding(12.dp)
+                    )
+                }
+            }
+
+            OutlinedCard(
+                onClick = { showJobApplyDialog = true },
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Surface(
+                        color = Color(0xFFDBEAFE),
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.size(40.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.WorkOutline,
+                            contentDescription = null,
+                            tint = Color(0xFF0284C7),
+                            modifier = Modifier.padding(8.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            "Looking for a Bus Driver / Conductor Job?",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp
+                        )
+                        Text(
+                            "Apply here — sent directly to Bus Owners for hiring",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Icon(Icons.Default.ChevronRight, contentDescription = null)
+                }
+            }
         }
+    }
+
+    // Driver / Conductor Job Application Dialog
+    if (showJobApplyDialog) {
+        var fullName by remember { mutableStateOf("") }
+        var jobRole by remember { mutableStateOf(if (selectedRole == UserRole.CONDUCTOR) "CONDUCTOR" else "DRIVER") }
+        var jobPhone by remember { mutableStateOf("") }
+        var jobEmail by remember { mutableStateOf("") }
+        var licenseNo by remember { mutableStateOf("") }
+        var badgeNo by remember { mutableStateOf("") }
+        var expYears by remember { mutableStateOf("3") }
+        var prefRoute by remember { mutableStateOf("Udupi – Katpadi – Shirva") }
+        var expSalary by remember { mutableStateOf("23000") }
+        var jobSubmitting by remember { mutableStateOf(false) }
+        var jobErr by remember { mutableStateOf<String?>(null) }
+
+        AlertDialog(
+            onDismissRequest = { if (!jobSubmitting) showJobApplyDialog = false },
+            title = { Text("Driver / Conductor Job Signup", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(
+                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        "Your profile will appear on the Bus Owner's Recruitment Board for immediate hiring.",
+                        fontSize = 12.sp,
+                        color = Color.Gray
+                    )
+                    if (jobErr != null) {
+                        Text(jobErr!!, color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(
+                            selected = jobRole == "DRIVER",
+                            onClick = { jobRole = "DRIVER" },
+                            label = { Text("Driver") }
+                        )
+                        FilterChip(
+                            selected = jobRole == "CONDUCTOR",
+                            onClick = { jobRole = "CONDUCTOR" },
+                            label = { Text("Conductor") }
+                        )
+                    }
+                    OutlinedTextField(value = fullName, onValueChange = { fullName = it }, label = { Text("Full Name*") }, singleLine = true)
+                    OutlinedTextField(value = jobPhone, onValueChange = { jobPhone = it }, label = { Text("Mobile Number*") }, singleLine = true)
+                    OutlinedTextField(value = jobEmail, onValueChange = { jobEmail = it }, label = { Text("Email Address*") }, singleLine = true)
+                    OutlinedTextField(value = licenseNo, onValueChange = { licenseNo = it }, label = { Text("HMV License / Conductor No.*") }, singleLine = true)
+                    OutlinedTextField(value = badgeNo, onValueChange = { badgeNo = it }, label = { Text("Badge Number (Optional)") }, singleLine = true)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(value = expYears, onValueChange = { expYears = it }, label = { Text("Exp (Yrs)") }, singleLine = true, modifier = Modifier.weight(1f))
+                        OutlinedTextField(value = expSalary, onValueChange = { expSalary = it }, label = { Text("Salary ₹") }, singleLine = true, modifier = Modifier.weight(1f))
+                    }
+                    OutlinedTextField(value = prefRoute, onValueChange = { prefRoute = it }, label = { Text("Preferred Route") }, singleLine = true)
+                }
+            },
+            confirmButton = {
+                Button(
+                    enabled = !jobSubmitting,
+                    onClick = {
+                        if (fullName.isBlank() || jobPhone.isBlank() || jobEmail.isBlank() || licenseNo.isBlank()) {
+                            jobErr = "Please fill Name, Phone, Email and License Number."
+                            return@Button
+                        }
+                        jobSubmitting = true
+                        jobErr = null
+                        scope.launch {
+                            app.transitRepository.applyForJob(
+                                JobApplicationRequest(
+                                    fullName = fullName.trim(),
+                                    role = jobRole,
+                                    phone = jobPhone.trim(),
+                                    email = jobEmail.trim(),
+                                    licenseNumber = licenseNo.trim(),
+                                    badgeNumber = badgeNo.trim().ifBlank { null },
+                                    experienceYears = expYears.toIntOrNull() ?: 1,
+                                    preferredRoutes = prefRoute.trim(),
+                                    expectedSalary = expSalary.toDoubleOrNull() ?: 22000.0
+                                )
+                            ).onSuccess { msg ->
+                                jobApplySuccessMsg = "✅ $msg"
+                                showJobApplyDialog = false
+                            }.onFailure { err ->
+                                jobErr = err.message ?: "Failed to submit"
+                            }
+                            jobSubmitting = false
+                        }
+                    }
+                ) {
+                    Text(if (jobSubmitting) "Submitting..." else "Submit Application")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showJobApplyDialog = false }) { Text("Cancel") }
+            }
+        )
     }
 
     // Server Config Dialog

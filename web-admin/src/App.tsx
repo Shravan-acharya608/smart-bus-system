@@ -13,6 +13,7 @@ import Reports from './pages/Reports';
 import Notifications from './pages/Notifications';
 import Settings from './pages/Settings';
 import NotFound from './pages/NotFound';
+import DriverSignup from './pages/DriverSignup';
 import { useAuthStore } from './store/authStore';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -28,6 +29,7 @@ const App: React.FC = () => {
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<Login />} />
+        <Route path="/jobs/driver-signup" element={<DriverSignup />} />
 
         {/* Protected routes wrapped in AppLayout */}
         <Route

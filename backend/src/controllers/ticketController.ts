@@ -757,3 +757,115 @@ export async function holdTicket(req: AuthenticatedRequest, res: Response): Prom
   }
 }
 
+export async function payInstantTicket(req: AuthenticatedRequest, res: Response): Promise<void> {
+  try {
+    const user = req.user;
+    const { tripId, boardingStopId, destinationStopId, paymentMode = 'RAZORPAY', razorpayRef } = req.body;
+
+    if (!tripId || !boardingStopId || !destinationStopId) {
+      res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'Missing trip or stop IDs' } });
+      return;
+    }
+
+    const trip = await prisma.trip.findUnique({
+      where: { id: tripId },
+      include: { route: { include: { stops: { orderBy: { stopOrder: 'asc' } } } } },
+    });
+
+    if (!trip) {
+      res.status(404).json({ success: false, error: { code: 'TRIP_NOT_FOUND', message: 'Trip not found' } });
+      return;
+    }
+
+    const boardingStop = trip.route.stops.find((s) => s.stopId === boardingStopId);
+    const destinationStop = trip.route.stops.find((s) => s.stopId === destinationStopId);
+
+    if (!boardingStop || !destinationStop || boardingStop.stopOrder >= destinationStop.stopOrder) {
+      res.status(400).json({ success: false, error: { code: 'INVALID_STOPS', message: 'Invalid boarding/destination stops' } });
+      return;
+    }
+
+    const fareDiff = (destinationStop.fareFromStart || 0) - (boardingStop.fareFromStart || 0);
+    const fare = fareDiff > 0 ? fareDiff : Math.max(10, (destinationStop.stopOrder - boardingStop.stopOrder) * 10);
+
+    const dbUser = await prisma.user.findUnique({ where: { id: user.userId } });
+    if (!dbUser) {
+      res.status(404).json({ success: false, error: { code: 'USER_NOT_FOUND', message: 'User not found' } });
+      return;
+    }
+
+    if (paymentMode === 'WALLET' && (dbUser.walletBalance ?? 0) < fare) {
+      res.status(400).json({
+        success: false,
+        error: { code: 'INSUFFICIENT_BALANCE', message: `Insufficient wallet balance (₹${dbUser.walletBalance}). Please top up or pay via Razorpay.` },
+      });
+      return;
+    }
+
+    const ticketCode = uuidv4();
+    const qrData = JSON.stringify({ code: ticketCode, tripId, mode: paymentMode, t: Date.now() });
+    const methodEnum = paymentMode === 'WALLET' ? PaymentMethod.UPI : PaymentMethod.ONLINE;
+
+    const result = await prisma.$transaction(async (tx) => {
+      let updatedBalance = dbUser.walletBalance ?? 500;
+      if (paymentMode === 'WALLET') {
+        const updatedUser = await tx.user.update({
+          where: { id: user.userId },
+          data: { walletBalance: { decrement: fare } },
+        });
+        updatedBalance = updatedUser.walletBalance;
+      }
+
+      const paidTicket = await tx.ticket.create({
+        data: {
+          ticketCode,
+          passengerId: user.userId,
+          tripId,
+          boardingStopId,
+          destinationStopId,
+          fare,
+          status: TicketStatus.PAID,
+          paymentMethod: methodEnum,
+          qrData,
+        },
+      });
+
+      await tx.payment.create({
+        data: {
+          ticketId: paidTicket.id,
+          amount: fare,
+          currency: 'INR',
+          status: PaymentStatus.SUCCESS,
+          paymentMethod: methodEnum,
+          isSandbox: true,
+          escrowStatus: EscrowStatus.HELD_IN_ESCROW,
+        },
+      });
+
+      const fullTicket = await tx.ticket.findUnique({
+        where: { id: paidTicket.id },
+        include: {
+          payment: true,
+          trip: {
+            include: {
+              bus: { select: { busNumber: true } },
+              route: { select: { name: true, code: true } },
+            },
+          },
+        },
+      });
+
+      return { ticket: fullTicket, walletBalance: updatedBalance };
+    });
+
+    res.status(201).json({
+      success: true,
+      data: result,
+      message: `Ticket booked & paid (₹${fare}) via ${paymentMode}!`,
+    });
+  } catch (error: any) {
+    console.error('payInstantTicket error:', error);
+    res.status(500).json({ success: false, error: { code: 'SERVER_ERROR', message: error.message || 'Instant payment failed' } });
+  }
+}
+

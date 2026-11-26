@@ -10,6 +10,7 @@ import {
   recordExit,
   issueOnboardTicket,
   holdTicket,
+  payInstantTicket,
 } from '../controllers/ticketController';
 
 const router = Router();
@@ -17,6 +18,7 @@ const router = Router();
 router.use(authenticateToken);
 
 // Passenger
+router.post('/pay-instant', (req, res) => payInstantTicket(req as any, res));
 router.post('/hold', (req, res) => holdTicket(req as any, res));
 router.post('/', (req, res) => createTicket(req as any, res));
 router.get('/my-tickets', (req, res) => getMyTickets(req as any, res));

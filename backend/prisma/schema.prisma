@@ -103,6 +103,8 @@ model User {
   isActive       Boolean   @default(true)
   isVerified     Boolean   @default(false)
   fcmToken       String?
+  permanentPassCode String? @unique
+  walletBalance  Float     @default(500.0)
   organizationId String?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
@@ -463,4 +465,32 @@ model FrequentRoute {
   @@index([passengerId])
   @@index([lastUsedAt])
 }
+
+enum JobApplicationStatus {
+  PENDING_REVIEW
+  SHORTLISTED
+  HIRED
+  REJECTED
+}
+
+model JobApplication {
+  id              String               @id @default(uuid())
+  fullName        String
+  role            UserRole             @default(DRIVER)
+  phone           String
+  email           String
+  licenseNumber   String
+  badgeNumber     String?
+  experienceYears Int                  @default(0)
+  preferredRoutes String               @default("Udupi – Katpadi – Shirva")
+  expectedSalary  Float                @default(22000)
+  status          JobApplicationStatus @default(PENDING_REVIEW)
+  notes           String?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  @@index([status])
+  @@index([createdAt])
+}
+
 

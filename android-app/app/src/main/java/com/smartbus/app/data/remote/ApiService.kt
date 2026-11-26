@@ -123,4 +123,23 @@ interface ApiService {
 
     @DELETE("journey-sharing/{id}")
     suspend fun revokeJourneyShare(@Path("id") id: String): Response<ApiResponse<Any>>
+
+    // Job Recruitment, Permanent Pass, Wallet, Staff Details & Instant Pay
+    @POST("jobs/apply")
+    suspend fun applyForJob(@Body request: JobApplicationRequest): Response<ApiResponse<Any>>
+
+    @GET("auth/pass")
+    suspend fun getPermanentPass(): Response<ApiResponse<PermanentPassData>>
+
+    @POST("auth/pass/regenerate")
+    suspend fun regeneratePermanentPass(): Response<ApiResponse<PermanentPassData>>
+
+    @POST("auth/wallet/topup")
+    suspend fun topUpWallet(@Body request: WalletTopUpRequest): Response<ApiResponse<WalletBalanceData>>
+
+    @GET("auth/staff-details")
+    suspend fun getStaffDetails(): Response<ApiResponse<StaffDetailsResponse>>
+
+    @POST("tickets/pay-instant")
+    suspend fun payInstantTicket(@Body request: InstantPayRequest): Response<ApiResponse<InstantPayResponse>>
 }

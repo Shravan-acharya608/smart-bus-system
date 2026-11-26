@@ -106,9 +106,34 @@ const Staff: React.FC = () => {
   const [payoutMethod, setPayoutMethod] = useState<'UPI' | 'BANK_TRANSFER' | 'CASH'>('UPI');
   const [payoutSuccessMsg, setPayoutSuccessMsg] = useState<string | null>(null);
 
-  // Hiring applicants state
-  const [jobApplicants, setJobApplicants] = useState<JobApplicant[]>(INITIAL_JOB_APPLICANTS);
+  // Fetch job applications from real backend API (fallback to initial demo if empty)
+  const { data: fetchedApplicants } = useQuery<JobApplicant[]>({
+    queryKey: ['job-applications'],
+    queryFn: async () => {
+      const res = await apiClient.get<ApiResponse<{ applications: any[] }>>('/jobs');
+      const apps = res.data.data?.applications || [];
+      return apps.map((a: any) => ({
+        id: a.id,
+        fullName: a.fullName,
+        role: a.role,
+        phone: a.phone,
+        email: a.email,
+        licenseNumber: a.licenseNumber,
+        badgeNumber: a.badgeNumber || 'N/A',
+        experienceYears: a.experienceYears || 0,
+        preferredRoutes: a.preferredRoutes || 'Udupi – Katpadi – Shirva',
+        expectedSalary: a.expectedSalary || 22000,
+        appliedDate: (a.createdAt || '').split('T')[0],
+        status: a.status,
+      }));
+    },
+  });
+
   const [applicantToHire, setApplicantToHire] = useState<JobApplicant | null>(null);
+  const jobApplicants: JobApplicant[] = React.useMemo(() => {
+    if (fetchedApplicants && fetchedApplicants.length > 0) return fetchedApplicants;
+    return INITIAL_JOB_APPLICANTS;
+  }, [fetchedApplicants]);
 
   // Create Staff Form
   const [firstName, setFirstName] = useState('');
@@ -214,24 +239,32 @@ const Staff: React.FC = () => {
   };
 
   // Instant hire action from Hiring Board
-  const handleHireApplicant = (applicant: JobApplicant) => {
-    const names = applicant.fullName.split(' ');
-    const fName = names[0];
-    const lName = names.slice(1).join(' ') || 'Staff';
-    const autoEmail = `${fName.toLowerCase()}.${lName.toLowerCase()}@smartbus.local`;
+  const handleHireApplicant = async (applicant: JobApplicant) => {
+    if (!applicant.id.startsWith('app-')) {
+      try {
+        await apiClient.post(`/jobs/${applicant.id}/hire`);
+        queryClient.invalidateQueries({ queryKey: ['job-applications'] });
+        queryClient.invalidateQueries({ queryKey: ['staff'] });
+        setPayoutSuccessMsg(`🎉 Hired ${applicant.fullName} as ${applicant.role}! Account created (Password: Staff@123456).`);
+        setTimeout(() => setPayoutSuccessMsg(null), 5000);
+      } catch (err: any) {
+        setFormError(err.response?.data?.error?.message || 'Failed to hire applicant');
+      }
+    } else {
+      const names = applicant.fullName.split(' ');
+      const fName = names[0];
+      const lName = names.slice(1).join(' ') || 'Staff';
+      const autoEmail = `${fName.toLowerCase()}.${lName.toLowerCase()}@smartbus.local`;
 
-    createStaffMutation.mutate({
-      firstName: fName,
-      lastName: lName,
-      email: autoEmail,
-      password: 'Staff@123456',
-      phone: applicant.phone,
-      role: applicant.role,
-    });
-
-    setJobApplicants((prev) =>
-      prev.map((a) => (a.id === applicant.id ? { ...a, status: 'HIRED' } : a))
-    );
+      createStaffMutation.mutate({
+        firstName: fName,
+        lastName: lName,
+        email: autoEmail,
+        password: 'Staff@123456',
+        phone: applicant.phone,
+        role: applicant.role,
+      });
+    }
     setApplicantToHire(null);
   };
 

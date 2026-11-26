@@ -38,7 +38,7 @@ fun RouteSearchScreen(
     onSelectBoardingStop: (String) -> Unit,
     onSelectDestStop: (String) -> Unit,
     onSearch: () -> Unit,
-    onBookNow: (BusSearchResult) -> Unit,
+    onBookNow: (BusSearchResult, String) -> Unit,
     onHoldTicket: (BusSearchResult) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -83,8 +83,8 @@ fun RouteSearchScreen(
             routeName = bus.routeName,
             baseFare = bus.fare,
             availableSeatsCount = bus.seatsAvailable,
-            onConfirmBooking = { _, _ ->
-                onBookNow(bus)
+            onConfirmBooking = { _, _, paymentMode ->
+                onBookNow(bus, paymentMode)
                 selectedBusForSeatSelection = null
             },
             onHoldBooking = { _, _ ->
