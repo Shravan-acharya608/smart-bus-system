@@ -1,7 +1,9 @@
 package com.smartbus.app.ui.screens.driver
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -89,6 +91,18 @@ fun DriverDashboardScreen(
 
     LaunchedEffect(Unit) {
         loadData()
+    }
+
+    // Automatically manage foreground GPS tracking service when trip/consent/permission change
+    LaunchedEffect(activeTrip?.id, driverGpsConsent, hasLocationPermission) {
+        val currentTrip = activeTrip
+        if (currentTrip != null && driverGpsConsent && hasLocationPermission) {
+            LocationTrackingService.startTracking(context, currentTrip.id)
+            isTrackingActive = true
+        } else {
+            LocationTrackingService.stopTracking(context)
+            isTrackingActive = false
+        }
     }
 
     Scaffold(
@@ -415,6 +429,56 @@ private fun DriverTripsAndGpsTab(
                             onSelectTrip = {}
                         )
                     }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Free Turn-by-Turn Voice Navigation Launcher
+                    val localContext = LocalContext.current
+                    val sortedStops = (activeTrip.route?.stops ?: emptyList()).sortedBy { it.stopOrder }
+                    val navTargetStop = sortedStops.lastOrNull()?.stop
+                    val targetLat = navTargetStop?.latitude ?: 13.2188
+                    val targetLng = navTargetStop?.longitude ?: 74.8223
+                    val targetName = navTargetStop?.name ?: "Shirva Bus Stand"
+
+                    Button(
+                        onClick = {
+                            val navUri = Uri.parse("google.navigation:q=$targetLat,$targetLng&mode=d")
+                            val navIntent = Intent(Intent.ACTION_VIEW, navUri).apply {
+                                setPackage("com.google.android.apps.maps")
+                            }
+                            try {
+                                localContext.startActivity(navIntent)
+                            } catch (_: Exception) {
+                                val fallbackIntent = Intent(
+                                    Intent.ACTION_VIEW,
+                                    Uri.parse("geo:$targetLat,$targetLng?q=$targetLat,$targetLng($targetName)")
+                                )
+                                try {
+                                    localContext.startActivity(fallbackIntent)
+                                } catch (_: Exception) {
+                                    localContext.startActivity(
+                                        Intent(
+                                            Intent.ACTION_VIEW,
+                                            Uri.parse("https://www.openstreetmap.org/directions?to=$targetLat,$targetLng")
+                                        )
+                                    )
+                                }
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0284C7)),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth().height(48.dp)
+                    ) {
+                        Icon(Icons.Default.Navigation, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Start Voice Navigation → $targetName", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    }
+                    Text(
+                        "Free turn-by-turn navigation while SmartBus broadcasts your live bus GPS in background.",
+                        fontSize = 10.sp,
+                        color = Color.Gray,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
 
                     Spacer(modifier = Modifier.height(12.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

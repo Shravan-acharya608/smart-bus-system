@@ -25,6 +25,18 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.google.gson.Gson
 import com.smartbus.app.data.model.Trip
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import org.json.JSONObject
+import java.net.HttpURLConnection
+import java.net.URL
+import kotlin.math.*
+
+data class RoadEtaInfo(
+    val minutes: Int,
+    val distanceKm: Double,
+    val targetStopName: String
+)
 
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
@@ -42,6 +54,31 @@ fun BusLiveMap(
     // Default coordinate: Udupi Service Bus Stand (13.3409, 74.7421)
     val defaultLat = 13.3409
     val defaultLng = 74.7421
+
+    // Calculate OSRM live road ETA for active trip
+    val focusTrip = selectedTrip ?: activeTrips.firstOrNull()
+    var liveEtaInfo by remember { mutableStateOf<RoadEtaInfo?>(null) }
+
+    LaunchedEffect(
+        focusTrip?.id,
+        focusTrip?.lastLocation?.latitude,
+        focusTrip?.lastLocation?.longitude
+    ) {
+        val loc = focusTrip?.lastLocation
+        if (loc == null) {
+            liveEtaInfo = null
+            return@LaunchedEffect
+        }
+        val sortedStops = (focusTrip.route?.stops ?: emptyList()).sortedBy { it.stopOrder }
+        val terminalStop = sortedStops.lastOrNull()?.stop
+        val destLat = terminalStop?.latitude ?: 13.2188
+        val destLng = terminalStop?.longitude ?: 74.8223
+        val destName = terminalStop?.name ?: "Shirva Bus Stand"
+
+        liveEtaInfo = withContext(Dispatchers.IO) {
+            fetchOsrmEta(loc.latitude, loc.longitude, destLat, destLng, destName)
+        }
+    }
 
     // Build compact JSON payload of trips & stops for Leaflet JS
     val mapPayloadJson = remember(activeTrips, selectedTrip) {
@@ -108,13 +145,13 @@ fun BusLiveMap(
             const map = L.map('map', { zoomControl: false }).setView([$defaultLat, $defaultLng], 12);
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
               maxZoom: 19,
-              attribution: '© OpenStreetMap'
+              attribution: '© OpenStreetMap | OSRM'
             }).addTo(map);
 
             const layerGroup = L.layerGroup().addTo(map);
             let hasFitted = false;
+            const osrmRouteCache = {};
 
-            // Always draw Udupi - Katpadi - Shirva corridor as baseline
             const defaultStops = [
               { order: 1, name: 'Udupi Service Bus Stand', lat: 13.3409, lng: 74.7421 },
               { order: 2, name: 'Kinnimulki', lat: 13.3235, lng: 74.7388 },
@@ -123,13 +160,32 @@ fun BusLiveMap(
               { order: 5, name: 'Shirva Bus Stand', lat: 13.2188, lng: 74.8223 }
             ];
 
+            function drawRoadPolyline(stops, styleOpts) {
+              const fallbackPts = stops.map(s => [s.lat, s.lng]);
+              const key = stops.map(s => s.lng.toFixed(5) + ',' + s.lat.toFixed(5)).join(';');
+              const initialPts = osrmRouteCache[key] || fallbackPts;
+              const poly = L.polyline(initialPts, styleOpts).addTo(layerGroup);
+
+              if (!osrmRouteCache[key] && stops.length >= 2) {
+                fetch('https://router.project-osrm.org/route/v1/driving/' + key + '?overview=full&geometries=geojson')
+                  .then(r => r.json())
+                  .then(data => {
+                    if (data && data.routes && data.routes[0] && data.routes[0].geometry) {
+                      const roadPts = data.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
+                      osrmRouteCache[key] = roadPts;
+                      poly.setLatLngs(roadPts);
+                    }
+                  })
+                  .catch(() => {});
+              }
+            }
+
             window.updateBusMap = function(trips) {
               layerGroup.clearLayers();
               const bounds = [];
 
               if (!trips || trips.length === 0) {
-                const pts = defaultStops.map(s => [s.lat, s.lng]);
-                L.polyline(pts, { color: '#0284C7', weight: 5, opacity: 0.75, dashArray: '8, 6' }).addTo(layerGroup);
+                drawRoadPolyline(defaultStops, { color: '#0284C7', weight: 5, opacity: 0.8 });
                 defaultStops.forEach(s => {
                   L.marker([s.lat, s.lng], {
                     icon: L.divIcon({ className: '', html: '<div class="stop-pin">' + s.order + '</div>', iconSize: [22, 22] })
@@ -139,13 +195,12 @@ fun BusLiveMap(
               } else {
                 trips.forEach(t => {
                   const stops = (t.stops && t.stops.length > 0) ? t.stops : defaultStops;
-                  const pts = stops.map(s => [s.lat, s.lng]);
-                  L.polyline(pts, {
+                  drawRoadPolyline(stops, {
                     color: t.hasLiveGps ? '#0284C7' : '#D97706',
                     weight: t.isSelected ? 6 : 4,
                     opacity: 0.85,
                     dashArray: t.hasLiveGps ? null : '8, 6'
-                  }).addTo(layerGroup);
+                  });
 
                   stops.forEach(s => {
                     L.marker([s.lat, s.lng], {
@@ -225,7 +280,7 @@ fun BusLiveMap(
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
                     text = if (hasAnyLiveGps)
-                        "LIVE GPS ACTIVE • Udupi – Katpadi – Shirva"
+                        "LIVE ROAD NAVIGATION • Udupi – Katpadi – Shirva"
                     else
                         "GENERAL ROUTE MODE • Driver GPS Offline",
                     fontSize = 11.sp,
@@ -250,16 +305,15 @@ fun BusLiveMap(
 
         // Bottom Sheet Card for Selected Bus
         AnimatedVisibility(
-            visible = selectedTrip != null || activeTrips.isNotEmpty(),
+            visible = focusTrip != null,
             enter = fadeIn(),
             exit = fadeOut(),
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .padding(14.dp)
         ) {
-            val trip = selectedTrip ?: activeTrips.firstOrNull()
-            if (trip != null) {
-                val hasGps = trip.lastLocation != null
+            if (focusTrip != null) {
+                val hasGps = focusTrip.lastLocation != null
                 Card(
                     shape = RoundedCornerShape(18.dp),
                     colors = CardDefaults.cardColors(containerColor = Color.White),
@@ -288,12 +342,12 @@ fun BusLiveMap(
                                 Spacer(modifier = Modifier.width(10.dp))
                                 Column {
                                     Text(
-                                        "Bus ${trip.bus?.busNumber ?: "KA-20-111"}",
+                                        "Bus ${focusTrip.bus?.busNumber ?: "KA-20-111"}",
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 15.sp
                                     )
                                     Text(
-                                        trip.route?.name ?: "Udupi – Katpadi – Shirva",
+                                        focusTrip.route?.name ?: "Udupi – Katpadi – Shirva",
                                         fontSize = 12.sp,
                                         color = Color.Gray
                                     )
@@ -304,7 +358,7 @@ fun BusLiveMap(
                                 shape = RoundedCornerShape(8.dp)
                             ) {
                                 Text(
-                                    if (hasGps) "⚡ ${trip.lastLocation?.speed?.toInt() ?: 0} km/h" else "📍 Scheduled",
+                                    if (hasGps) "⚡ ${focusTrip.lastLocation?.speed?.toInt() ?: 0} km/h" else "📍 Scheduled",
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = if (hasGps) Color(0xFF047857) else Color(0xFF92400E),
@@ -313,10 +367,31 @@ fun BusLiveMap(
                             }
                         }
 
-                        if (!hasGps) {
+                        if (hasGps && liveEtaInfo != null) {
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Surface(
+                                color = Color(0xFFF0FDF4),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(Icons.Default.Schedule, contentDescription = null, tint = Color(0xFF15803D), modifier = Modifier.size(14.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        "OSRM Road ETA: ~${liveEtaInfo!!.minutes} min (${String.format("%.1f", liveEtaInfo!!.distanceKm)} km) to ${liveEtaInfo!!.targetStopName}",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = Color(0xFF15803D)
+                                    )
+                                }
+                            }
+                        } else if (!hasGps) {
                             Spacer(modifier = Modifier.height(6.dp))
                             Text(
-                                "Driver phone GPS is paused/declined. Showing scheduled corridor stops & timetable.",
+                                "Driver phone GPS is paused/declined. Showing OSRM corridor roads & timetable.",
                                 fontSize = 11.sp,
                                 color = Color(0xFF92400E)
                             )
@@ -329,7 +404,7 @@ fun BusLiveMap(
                         ) {
                             if (onBookTicket != null) {
                                 Button(
-                                    onClick = { onBookTicket(trip) },
+                                    onClick = { onBookTicket(focusTrip) },
                                     modifier = Modifier.weight(1f),
                                     shape = RoundedCornerShape(10.dp)
                                 ) {
@@ -340,7 +415,7 @@ fun BusLiveMap(
                             }
                             if (onShareJourney != null) {
                                 OutlinedButton(
-                                    onClick = { onShareJourney(trip.id) },
+                                    onClick = { onShareJourney(focusTrip.id) },
                                     modifier = Modifier.weight(1f),
                                     shape = RoundedCornerShape(10.dp)
                                 ) {
@@ -355,4 +430,44 @@ fun BusLiveMap(
             }
         }
     }
+}
+
+private fun fetchOsrmEta(
+    fromLat: Double,
+    fromLng: Double,
+    toLat: Double,
+    toLng: Double,
+    targetStopName: String
+): RoadEtaInfo {
+    try {
+        val url = URL("https://router.project-osrm.org/route/v1/driving/$fromLng,$fromLat;$toLng,$toLat?overview=false")
+        val conn = (url.openConnection() as HttpURLConnection).apply {
+            connectTimeout = 4000
+            readTimeout = 4000
+            requestMethod = "GET"
+        }
+        if (conn.responseCode == 200) {
+            val body = conn.inputStream.bufferedReader().readText()
+            val json = JSONObject(body)
+            val routes = json.optJSONArray("routes")
+            if (routes != null && routes.length() > 0) {
+                val r0 = routes.getJSONObject(0)
+                val sec = r0.optDouble("duration", 600.0)
+                val meters = r0.optDouble("distance", 1000.0)
+                return RoadEtaInfo(
+                    minutes = maxOf(1, (sec / 60.0).roundToInt()),
+                    distanceKm = meters / 1000.0,
+                    targetStopName = targetStopName
+                )
+            }
+        }
+    } catch (_: Exception) {
+        // Fallback to Haversine road estimate (~1.25x straight line at 35 km/h)
+    }
+    val dLat = Math.toRadians(toLat - fromLat)
+    val dLng = Math.toRadians(toLng - fromLng)
+    val a = sin(dLat / 2).pow(2) + cos(Math.toRadians(fromLat)) * cos(Math.toRadians(toLat)) * sin(dLng / 2).pow(2)
+    val km = 6371.0 * 2 * asin(sqrt(a)) * 1.25
+    val mins = maxOf(1, ((km / 35.0) * 60.0).roundToInt())
+    return RoadEtaInfo(minutes = mins, distanceKm = km, targetStopName = targetStopName)
 }

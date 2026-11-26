@@ -62,6 +62,8 @@ export const LeafletFleetMap: React.FC<LeafletFleetMapProps> = ({
   const markersRef = useRef<{ [key: string]: L.Marker }>({});
   const stopMarkersRef = useRef<L.Marker[]>([]);
   const polylineRef = useRef<L.Polyline | null>(null);
+  const hasInitialFitRef = useRef<boolean>(false);
+  const osrmCacheRef = useRef<{ [key: string]: [number, number][] }>({});
 
   // Initialize Map centered on Udupi, Karnataka, India
   useEffect(() => {
@@ -104,16 +106,34 @@ export const LeafletFleetMap: React.FC<LeafletFleetMapProps> = ({
 
     if (sortedStops.length > 0) {
       const latLngs: [number, number][] = sortedStops.map((s) => [s.latitude, s.longitude]);
+      const coordKey = sortedStops.map((s) => `${s.longitude.toFixed(5)},${s.latitude.toFixed(5)}`).join(';');
 
-      // Draw Route Corridor Polyline
-      const poly = L.polyline(latLngs, {
+      // Draw baseline polyline first, then upgrade to real OSRM road-snapped geometry
+      const initialPts = osrmCacheRef.current[coordKey] || latLngs;
+      const poly = L.polyline(initialPts, {
         color: '#0284c7',
         weight: 5,
         opacity: 0.85,
-        dashArray: undefined,
       }).addTo(map);
-
       polylineRef.current = poly;
+
+      if (!osrmCacheRef.current[coordKey] && sortedStops.length >= 2) {
+        fetch(`https://router.project-osrm.org/route/v1/driving/${coordKey}?overview=full&geometries=geojson`)
+          .then((r) => r.json())
+          .then((data) => {
+            const coords = data?.routes?.[0]?.geometry?.coordinates;
+            if (Array.isArray(coords) && coords.length > 0) {
+              const roadPts: [number, number][] = coords.map((c: [number, number]) => [c[1], c[0]]);
+              osrmCacheRef.current[coordKey] = roadPts;
+              if (polylineRef.current === poly && mapInstanceRef.current) {
+                poly.setLatLngs(roadPts);
+              }
+            }
+          })
+          .catch(() => {
+            // Keep baseline stop-to-stop polyline if OSRM is temporarily unreachable
+          });
+      }
 
       // Draw Stop Markers along the route
       sortedStops.forEach((stop) => {
@@ -234,16 +254,15 @@ export const LeafletFleetMap: React.FC<LeafletFleetMapProps> = ({
       markersRef.current[bus.busId] = marker;
     });
 
-    // Auto center / fit bounds
+    // Pan to selected live bus smoothly or fit corridor once on first load
     if (selectedBus?.lastLocation) {
-      map.setView([selectedBus.lastLocation.latitude, selectedBus.lastLocation.longitude], 14, {
+      map.panTo([selectedBus.lastLocation.latitude, selectedBus.lastLocation.longitude], {
         animate: true,
       });
-      const marker = markersRef.current[selectedBus.busId];
-      if (marker) marker.openPopup();
-    } else if (allBoundPoints.length > 0) {
+    } else if (!hasInitialFitRef.current && allBoundPoints.length > 0) {
       const bounds = L.latLngBounds(allBoundPoints);
       map.fitBounds(bounds, { padding: [50, 50], maxZoom: 14 });
+      hasInitialFitRef.current = true;
     }
   }, [fleet, selectedBus, onSelectBus, routeStops]);
 

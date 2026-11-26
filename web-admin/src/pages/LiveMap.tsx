@@ -26,6 +26,7 @@ interface IncidentItem {
 
 const LiveMap: React.FC = () => {
   const [selectedBus, setSelectedBus] = useState<FleetBus | null>(null);
+  const [liveEta, setLiveEta] = useState<{ minutes: number; km: string; stopName: string } | null>(null);
 
   // 1. Fetch live fleet status from admin dashboard
   const { data, isLoading, refetch, isFetching } = useQuery<FleetBus[]>({
@@ -80,8 +81,43 @@ const LiveMap: React.FC = () => {
   useEffect(() => {
     if (fleet.length > 0 && !selectedBus) {
       setSelectedBus(fleet[0]);
+    } else if (selectedBus) {
+      const refreshed = fleet.find((b) => b.tripId === selectedBus.tripId);
+      if (refreshed) setSelectedBus(refreshed);
     }
   }, [fleet, selectedBus]);
+
+  // Compute live road-snapped OSRM ETA to terminal stop (Shirva) when driver GPS is active
+  useEffect(() => {
+    const loc = selectedBus?.lastLocation;
+    if (!loc) {
+      setLiveEta(null);
+      return;
+    }
+    const lastStop = activeRouteStops.length > 0
+      ? [...activeRouteStops].sort((a, b) => a.order - b.order)[activeRouteStops.length - 1]
+      : { name: 'Shirva Bus Stand', latitude: 13.2188, longitude: 74.8223 };
+
+    let cancelled = false;
+    fetch(`https://router.project-osrm.org/route/v1/driving/${loc.longitude},${loc.latitude};${lastStop.longitude},${lastStop.latitude}?overview=false`)
+      .then((r) => r.json())
+      .then((res) => {
+        if (cancelled) return;
+        const route = res?.routes?.[0];
+        if (route) {
+          setLiveEta({
+            minutes: Math.max(1, Math.round((route.duration || 0) / 60)),
+            km: ((route.distance || 0) / 1000).toFixed(1),
+            stopName: lastStop.name,
+          });
+        }
+      })
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedBus?.lastLocation?.latitude, selectedBus?.lastLocation?.longitude, activeRouteStops]);
 
   return (
     <div className="space-y-6">
@@ -283,10 +319,16 @@ const LiveMap: React.FC = () => {
 
               {/* Telemetry info bar (Live GPS active) */}
               {selectedBus?.lastLocation ? (
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-gray-50 border border-gray-200 p-3 rounded-lg text-xs">
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 bg-emerald-50/60 border border-emerald-200 p-3 rounded-lg text-xs">
                   <div>
                     <span className="text-gray-500">Live Speed:</span>
                     <p className="font-bold text-gray-900">{selectedBus.lastLocation.speed?.toFixed(1) || 0} km/h</p>
+                  </div>
+                  <div>
+                    <span className="text-emerald-700 font-medium">OSRM Road ETA:</span>
+                    <p className="font-bold text-emerald-900">
+                      {liveEta ? `${liveEta.minutes} min (${liveEta.km} km)` : 'Calculating...'}
+                    </p>
                   </div>
                   <div>
                     <span className="text-gray-500">Heading:</span>
